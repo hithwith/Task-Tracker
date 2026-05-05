@@ -26,7 +26,7 @@
         <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-blue-600">
             <h2 class="text-3xl font-black mb-8 text-center text-slate-800 tracking-tight">TASK SYSTEM</h2>
             <div class="space-y-4">
-                <input type="text" id="unit_name" class="w-full p-3 border-2 rounded-xl focus:border-blue-500 outline-none transition" placeholder="Mã đơn vị">
+                <input type="text" id="unit_name" class="w-full p-3 border-2 rounded-xl focus:border-blue-500 outline-none transition" placeholder="Mã đơn vị" value="ARITO">
                 <input type="text" id="username" class="w-full p-3 border-2 rounded-xl focus:border-blue-500 outline-none transition" placeholder="Tên đăng nhập">
                 <input type="password" id="password" class="w-full p-3 border-2 rounded-xl focus:border-blue-500 outline-none transition" placeholder="Mật khẩu">
                 <button onclick="handleLogin()" id="login-btn" class="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 shadow-lg transform active:scale-95 transition">ĐĂNG NHẬP</button>
@@ -143,6 +143,8 @@
             else if (menuId === '10.02') renderCalendar();
             else if (menuId === '10.03') renderDashboard();
             else if (menuId === '10.04') renderProjectList();
+            else if (menuId === '10.05.01') renderReport100501();
+            else if (menuId === '10.05.02') renderReport100502();
         }
 
         // --- 10.01 TỔNG HỢP CÔNG VIỆC ---
@@ -167,7 +169,7 @@
                             <div class="flex gap-2"><input type="text" id="adv_c_start" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"><input type="text" id="adv_c_end" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"></div>
                         </div>
                         <div class="space-y-1">
-                            <label class="text-xs font-bold uppercase">Hạn chót (Từ - Đến)</label>
+                            <label class="text-xs font-bold uppercase">Ngày đến hạn (Từ - Đến)</label>
                             <div class="flex gap-2"><input type="text" id="adv_d_start" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"><input type="text" id="adv_d_end" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"></div>
                         </div>
                         <div class="space-y-1">
@@ -201,7 +203,7 @@
                                 <th class="p-5">Dự án</th>
                                 <th class="p-5">Chi tiết công việc</th>
                                 <th class="p-5 text-center">Bắt đầu</th>
-                                <th class="p-5 text-center">Hạn chót</th>
+                                <th class="p-5 text-center">Ngày đến hạn</th>
                                 <th class="p-5 text-center">Trạng thái</th>
                                 <th class="p-5 text-right">Thao tác</th>
                             </tr>
@@ -225,7 +227,8 @@
                     <td class="p-5 text-center">
                         <span class="px-3 py-1 rounded-full text-[9px] font-black uppercase ${getStatusColor(t.status)}">${getStatusName(t.status)}</span>
                     </td>
-                    <td class="p-5 text-right" onclick="event.stopPropagation()">
+                    <td class="p-5 text-right space-x-1" onclick="event.stopPropagation()">
+                        ${t.status == 0 ? `<button onclick="doQuickStart('${t.id}')" class="bg-blue-500 text-white px-3 py-1 rounded-lg text-[10px] font-black shadow-lg">BẮT ĐẦU</button>` : ''}
                         ${t.status != 5 ? `<button onclick="doQuickDone('${t.id}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black shadow-lg">XONG</button>` : '✅'}
                     </td>
                 </tr>
@@ -288,7 +291,7 @@
                     
                     <div id="adv-filter-cal" class="hidden mb-8 p-6 bg-slate-50 rounded-2xl grid grid-cols-4 gap-4 border">
                         <div><label class="text-xs font-bold uppercase">Hạn từ - Đến</label><div class="flex gap-2"><input type="text" id="cal_d_start" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"><input type="text" id="cal_d_end" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"></div></div>
-                        <div><label class="text-xs font-bold uppercase">Người làm</label><select id="cal_user" class="w-full p-2 border rounded-lg text-xs"><option value="">Tất cả</option>${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${String(u.user_id) === String(SESSION.user.user_id) ? 'selected' : ''}>${u.username}</option>`).join('')}</select></div>
+                        <div><label class="text-xs font-bold uppercase">Người thực hiện</label><select id="cal_user" class="w-full p-2 border rounded-lg text-xs"><option value="">Tất cả</option>${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${String(u.user_id) === String(SESSION.user.user_id) ? 'selected' : ''}>${u.username}</option>`).join('')}</select></div>
                         <div><label class="text-xs font-bold uppercase">Trạng thái</label><div class="multi-select-box text-[10px]" id="cal_st_list">${MASTER_DATA.statuses.map(s => `<label class="block"><input type="checkbox" value="${s.status_code}" ${(s.status_code == 0 || s.status_code == 3) ? 'checked' : ''}> ${s.status_name}</label>`).join('')}</div></div>
                         <div class="flex items-end"><button onclick="applyCalFilter()" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm">LỌC LỊCH</button></div>
                     </div>
@@ -387,7 +390,7 @@
                 </tr>`;
 
             const tableHead = `<thead class="bg-slate-50 border-b"><tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <th class="p-3">Dự án</th><th class="p-3">Tên công việc</th><th class="p-3">Người làm</th><th class="p-3 text-center">Hạn chót</th><th class="p-3 text-center">Trạng thái</th>
+                <th class="p-3">Dự án</th><th class="p-3">Tên công việc</th><th class="p-3">Người thực hiện</th><th class="p-3 text-center">Ngày đến hạn</th><th class="p-3 text-center">Trạng thái</th>
             </tr></thead>`;
 
             container.innerHTML = `
@@ -583,7 +586,7 @@
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Dự án</label><select name="project_code" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.projects.map(p => `<option value="${p.project_code}" ${t?.project_code == p.project_code ? 'selected' : ''}>${p.project_name}</option>`).join('')}</select></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Người thực hiện</label><select name="user_id" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${t?.user_id == u.user_id ? 'selected' : (isEdit ? '' : (SESSION.user.user_id == u.user_id ? 'selected' : ''))}>${u.username}</option>`).join('')}</select></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Ngày bắt đầu</label><input type="text" name="start_date" class="date-mask w-full p-3 border-2 rounded-xl" placeholder="DD/MM/YYYY" maxlength="10" value="${formatDate(t?.start_date || new Date().toISOString())}"></div>
-                            <div><label class="text-[10px] font-black uppercase text-slate-400">Hạn chót *</label><input type="text" name="due_date" required class="date-mask w-full p-3 border-2 rounded-xl" placeholder="DD/MM/YYYY" maxlength="10" value="${t?.due_date ? formatDate(t.due_date) : ''}"></div>
+                            <div><label class="text-[10px] font-black uppercase text-slate-400">Ngày đến hạn *</label><input type="text" name="due_date" required class="date-mask w-full p-3 border-2 rounded-xl" placeholder="DD/MM/YYYY" maxlength="10" value="${t?.due_date ? formatDate(t.due_date) : ''}"></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Ưu tiên</label><select name="priority" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.priorities.map(p => `<option value="${p.priority_code}" ${t?.priority == p.priority_code ? 'selected' : ''}>${p.priority_name}</option>`).join('')}</select></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Trạng thái</label><select name="status" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.statuses.map(s => `<option value="${s.status_code}" ${t?.status == s.status_code ? 'selected' : ''}>${s.status_name}</option>`).join('')}</select></div>
                             <div class="col-span-2 flex justify-between mt-4 border-t pt-6">
@@ -693,6 +696,22 @@
             });
         }
 
+        function doQuickStart(id) {
+            showConfirm("Bắt đầu", "Xác nhận bắt đầu thực hiện công việc?", () => {
+                const now = new Date();
+                const actStart = `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+                const task = ALL_TASKS.find(t => t.id == id);
+                if (task) {
+                    task.status = 3;
+                    task.act_start_date = actStart;
+                }
+                renderTable1001();
+                fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: { id, status: 3, act_start_date: actStart } }) })
+                    .then(() => { TASKS_DIRTY = true; })
+                    .catch(() => { TASKS_DIRTY = true; });
+            });
+        }
+
         function doQuickDone(id) {
             showConfirm("Hoàn thành", "Xác nhận công việc đã xong?", () => {
                 const finishTime = new Date();
@@ -700,6 +719,7 @@
                 const finishIso = `${finishTime.getDate().toString().padStart(2,'0')}/${(finishTime.getMonth()+1).toString().padStart(2,'0')}/${finishTime.getFullYear()} ${finishTime.getHours()}:${finishTime.getMinutes().toString().padStart(2,'0')}:${finishTime.getSeconds().toString().padStart(2,'0')}`;
                 const task = ALL_TASKS.find(t => t.id == id);
                 let duration = null;
+                let act_time = null;
                 if (task) {
                     task.status = 5;
                     task.finish_date = finishIso;
@@ -711,11 +731,20 @@
                             task.duration = duration;
                         }
                     }
+                    // Tính act_time: số giây từ act_start_date đến finish_date
+                    if (task.act_start_date) {
+                        const actStart = parseDatetime0(task.act_start_date);
+                        if (actStart && !isNaN(actStart)) {
+                            act_time = Math.round((finishTime - actStart) / 1000);
+                            task.act_time = act_time;
+                        }
+                    }
                 }
                 renderTable1001();
                 // Gửi API ngầm
                 const payload = { id, status: 5, finish_date: finishIso };
                 if (duration !== null) payload.duration = duration;
+                if (act_time !== null) payload.act_time = act_time;
                 fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: payload }) })
                     .then(() => { TASKS_DIRTY = true; })
                     .catch(() => { TASKS_DIRTY = true; });
@@ -843,6 +872,228 @@
             if (c == 0) return 'bg-rose-100 text-rose-700';
             return 'bg-slate-100 text-slate-700';
         }
+        // =============================================
+        // 10.05.01 - THỐNG KÊ THỜI GIAN LÀM VIỆC CÁ NHÂN
+        // =============================================
+        let calReport100501Date = new Date();
+
+        function getReportDate100501(task) {
+            const raw = (task.finish_date && task.finish_date.toString().trim() !== '')
+                ? task.finish_date
+                : task.act_start_date;
+            return parseDatetime0(raw);
+        }
+
+        function renderReport100501() {
+            const container = document.getElementById('main-content');
+            const year = calReport100501Date.getFullYear();
+            const month = calReport100501Date.getMonth();
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            const selUserId = document.getElementById('rpt0501_user')
+                ? document.getElementById('rpt0501_user').value
+                : String(SESSION.user.user_id);
+
+            const monthTasks = ALL_TASKS.filter(t => {
+                if (t.status != 3 && t.status != 5) return false;
+                if (selUserId && String(t.user_id) !== String(selUserId)) return false;
+                const d = getReportDate100501(t);
+                if (!d) return false;
+                return d.getFullYear() === year && d.getMonth() === month;
+            });
+
+            const tasksByDay = {};
+            monthTasks.forEach(t => {
+                const d = getReportDate100501(t);
+                if (!d) return;
+                const day = d.getDate();
+                if (!tasksByDay[day]) tasksByDay[day] = [];
+                tasksByDay[day].push(t);
+            });
+
+            const userOptions = MASTER_DATA.users.map(u =>
+                `<option value="${u.user_id}" ${String(u.user_id) === String(selUserId) ? 'selected' : ''}>${u.username}</option>`
+            ).join('');
+
+            container.innerHTML = `
+                <div class="bg-white p-6 rounded-2xl shadow-sm border mb-6">
+                    <div class="flex flex-wrap gap-4 items-end mb-6">
+                        <div>
+                            <label class="text-[10px] font-black uppercase text-slate-400">Người thực hiện</label>
+                            <select id="rpt0501_user" onchange="renderReport100501()" class="w-48 p-2.5 border-2 rounded-xl text-sm outline-none focus:border-blue-400">
+                                <option value="">-- Tất cả --</option>
+                                ${userOptions}
+                            </select>
+                        </div>
+                        <div class="flex gap-2 items-center">
+                            <button onclick="changeMonthRpt0501(-1)" class="w-10 h-10 bg-gray-50 rounded-xl border flex items-center justify-center font-bold">&#9664;</button>
+                            <h3 class="text-xl font-black text-slate-800 px-4">THÁNG ${(month+1)} / ${year}</h3>
+                            <button onclick="changeMonthRpt0501(1)" class="w-10 h-10 bg-gray-50 rounded-xl border flex items-center justify-center font-bold">&#9654;</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 gap-px bg-slate-200 border rounded-xl overflow-hidden shadow-inner">
+                        ${['CN','T2','T3','T4','T5','T6','T7'].map(d => '<div class="bg-slate-50 p-3 text-center font-black text-[10px] text-slate-400">'+d+'</div>').join('')}
+                        ${Array(firstDay).fill('').map(() => '<div class="bg-slate-50 p-2 min-h-[120px]"></div>').join('')}
+                        ${Array.from({length: daysInMonth}, (_, i) => {
+                            const d = i + 1;
+                            const today2 = new Date();
+                            const isToday = (d === today2.getDate() && month === today2.getMonth() && year === today2.getFullYear());
+                            const dayTasks = tasksByDay[d] || [];
+                            const totalSeconds = dayTasks.reduce((sum, t) => sum + (parseFloat(t.act_time) || 0), 0);
+                            const totalHours = (totalSeconds / 3600).toFixed(2);
+                            const hasTasks = dayTasks.length > 0;
+                            const doingTasks = dayTasks.filter(t => t.status == 3);
+                            const doneTasks  = dayTasks.filter(t => t.status == 5);
+                            return '<div class="bg-white p-2 min-h-[120px] border-t hover:bg-blue-50/30 overflow-y-auto">'
+                                + '<div class="flex justify-between items-start mb-1">'
+                                + '<span class="text-xs font-black ' + (isToday ? 'text-blue-600 bg-blue-50 w-6 h-6 flex items-center justify-center rounded-full' : 'text-slate-500') + '">' + d + '</span>'
+                                + (hasTasks ? '<span class="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">' + totalHours + 'h</span>' : '')
+                                + '</div>'
+                                + doingTasks.map(t => {
+                                    const hrs = t.act_time ? (parseFloat(t.act_time)/3600).toFixed(2) : null;
+                                    return '<div class="text-[8px] bg-blue-100 text-blue-700 p-1 mb-0.5 rounded-md font-bold truncate" title="' + t.task_name + '">'
+                                        + '\uD83D\uDD04 ' + t.task_name + (hrs ? ' (' + hrs + 'h)' : '') + '</div>';
+                                }).join('')
+                                + doneTasks.map(t => {
+                                    const hrs = t.act_time ? (parseFloat(t.act_time)/3600).toFixed(2) : null;
+                                    return '<div class="text-[8px] bg-emerald-100 text-emerald-700 p-1 mb-0.5 rounded-md font-bold truncate" title="' + t.task_name + '">'
+                                        + '\u2705 ' + t.task_name + (hrs ? ' (' + hrs + 'h)' : '') + '</div>';
+                                }).join('')
+                                + '</div>';
+                        }).join('')}
+                    </div>
+                    <div class="mt-6 p-4 bg-slate-50 rounded-xl border">
+                        <div class="grid grid-cols-3 gap-4 text-center">
+                            <div>
+                                <div class="text-2xl font-black text-slate-800">${monthTasks.length}</div>
+                                <div class="text-[10px] font-black text-slate-400 uppercase mt-1">Tổng công việc</div>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-black text-emerald-600">${monthTasks.filter(t=>t.status==5).length}</div>
+                                <div class="text-[10px] font-black text-slate-400 uppercase mt-1">Hoàn thành</div>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-black text-blue-600">${(monthTasks.reduce((s,t)=>s+(parseFloat(t.act_time)||0),0)/3600).toFixed(2)}h</div>
+                                <div class="text-[10px] font-black text-slate-400 uppercase mt-1">Tổng giờ làm</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function changeMonthRpt0501(s) {
+            calReport100501Date.setMonth(calReport100501Date.getMonth() + s);
+            renderReport100501();
+        }
+
+        // =============================================
+        // 10.05.02 - BÁO CÁO TỔNG TÌNH HÌNH LÀM VIỆC CỦA PHÒNG
+        // =============================================
+        function renderReport100502() {
+            const container = document.getElementById('main-content');
+            const today = new Date();
+            const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const defaultFrom = firstOfMonth.getDate().toString().padStart(2,'0') + '/' + (firstOfMonth.getMonth()+1).toString().padStart(2,'0') + '/' + firstOfMonth.getFullYear();
+            const defaultTo   = today.getDate().toString().padStart(2,'0') + '/' + (today.getMonth()+1).toString().padStart(2,'0') + '/' + today.getFullYear();
+
+            container.innerHTML = `
+                <div class="bg-white p-6 rounded-2xl shadow-sm border mb-6">
+                    <div class="flex flex-wrap gap-4 items-end mb-6">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black uppercase text-slate-400">Từ ngày</label>
+                            <input type="text" id="rpt0502_from" class="date-mask p-2.5 border-2 rounded-xl text-sm w-36 outline-none focus:border-blue-400" placeholder="DD/MM/YYYY" maxlength="10" value="${defaultFrom}">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black uppercase text-slate-400">Đến ngày</label>
+                            <input type="text" id="rpt0502_to" class="date-mask p-2.5 border-2 rounded-xl text-sm w-36 outline-none focus:border-blue-400" placeholder="DD/MM/YYYY" maxlength="10" value="${defaultTo}">
+                        </div>
+                        <button onclick="applyReport100502()" class="px-6 py-2.5 bg-slate-800 text-white rounded-xl font-bold text-sm">XEM BÁO CÁO</button>
+                    </div>
+                    <div id="rpt0502_table_area">${buildReport100502Table(defaultFrom, defaultTo)}</div>
+                </div>`;
+            initDateMasks();
+        }
+
+        function buildReport100502Table(fromStr, toStr) {
+            const fromDate = parseLocalDate(fromStr);
+            const toDate   = parseLocalDate(toStr);
+
+            const filtered = ALL_TASKS.filter(t => {
+                if (t.status != 5) return false;
+                if (!t.finish_date) return false;
+                const fd = parseDatetime0(t.finish_date);
+                if (!fd) return false;
+                const fdDate = new Date(fd.getFullYear(), fd.getMonth(), fd.getDate());
+                if (fromDate && fdDate < fromDate) return false;
+                if (toDate   && fdDate > toDate)   return false;
+                return true;
+            });
+
+            if (!filtered.length) {
+                return '<div class="text-center py-12 text-slate-400 text-sm">Không có dữ liệu trong khoảng thời gian này.</div>';
+            }
+
+            const grouped = {};
+            filtered.forEach(t => {
+                const fd = parseDatetime0(t.finish_date);
+                const dayKey = fd.getFullYear() + '-' + (fd.getMonth()+1).toString().padStart(2,'0') + '-' + fd.getDate().toString().padStart(2,'0');
+                const key = t.user_id + '__' + dayKey;
+                if (!grouped[key]) grouped[key] = { user_id: t.user_id, dayKey, tasks: [] };
+                grouped[key].tasks.push(t);
+            });
+
+            const rows = Object.values(grouped).sort((a,b) => {
+                const ua = getUserName(a.user_id), ub = getUserName(b.user_id);
+                if (ua < ub) return -1; if (ua > ub) return 1;
+                return a.dayKey.localeCompare(b.dayKey);
+            });
+
+            const grandTotal = rows.reduce((sum, r) => sum + r.tasks.reduce((s,t) => s + (parseFloat(t.act_time)||0), 0), 0);
+
+            let lastUser = null, userTotal = 0, userRows = '', tableBody = '';
+
+            const flushUser = () => {
+                if (lastUser !== null) {
+                    tableBody += userRows;
+                    tableBody += '<tr class="bg-blue-50 border-t-2 border-blue-200">'
+                        + '<td colspan="2" class="p-3 text-right text-xs font-black text-blue-700 uppercase">Tổng cộng ' + getUserName(lastUser) + '</td>'
+                        + '<td class="p-3 text-center text-sm font-black text-blue-700">' + (userTotal/3600).toFixed(2) + ' giờ</td></tr>';
+                    userRows = ''; userTotal = 0;
+                }
+            };
+
+            rows.forEach(r => {
+                if (lastUser !== null && r.user_id != lastUser) flushUser();
+                lastUser = r.user_id;
+                const dayHours = r.tasks.reduce((s,t) => s + (parseFloat(t.act_time)||0), 0);
+                userTotal += dayHours;
+                const [fy, fm, fd2] = r.dayKey.split('-');
+                const dayDisplay = fd2 + '/' + fm + '/' + fy;
+                userRows += '<tr class="border-b hover:bg-slate-50">'
+                    + '<td class="p-3 text-sm font-bold text-slate-700">' + getUserName(r.user_id) + '</td>'
+                    + '<td class="p-3 text-sm text-slate-600 text-center">' + dayDisplay + '</td>'
+                    + '<td class="p-3 text-sm text-center font-bold text-emerald-700">' + (dayHours/3600).toFixed(2) + '</td></tr>';
+            });
+            flushUser();
+
+            return '<div class="rounded-xl border overflow-hidden">'
+                + '<table class="w-full text-left">'
+                + '<thead class="bg-slate-50 border-b"><tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">'
+                + '<th class="p-3">Người thực hiện</th><th class="p-3 text-center">Ngày</th><th class="p-3 text-center">Tổng thời gian (giờ)</th></tr></thead>'
+                + '<tbody class="divide-y">' + tableBody + '</tbody>'
+                + '<tfoot><tr class="bg-slate-800 text-white">'
+                + '<td colspan="2" class="p-4 font-black text-sm uppercase tracking-wide text-right">TỔNG CỘNG TOÀN PHÒNG</td>'
+                + '<td class="p-4 font-black text-lg text-center text-yellow-300">' + (grandTotal/3600).toFixed(2) + ' giờ</td>'
+                + '</tr></tfoot></table></div>';
+        }
+
+        function applyReport100502() {
+            const from = document.getElementById('rpt0502_from').value;
+            const to   = document.getElementById('rpt0502_to').value;
+            document.getElementById('rpt0502_table_area').innerHTML = buildReport100502Table(from, to);
+        }
+
         function logout() { localStorage.removeItem('arito_qlcv_session'); location.reload(); }
 
         // Khôi phục session khi F5 / mở lại tab
