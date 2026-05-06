@@ -48,6 +48,12 @@
         <div class="flex-1 flex flex-col overflow-hidden">
             <header class="bg-white shadow-sm p-5 border-b flex justify-between items-center">
                 <h2 id="page-title" class="text-xl font-extrabold text-slate-700 uppercase tracking-tight"></h2>
+                <div class="flex items-center gap-3">
+                    <button id="notif-bell-btn" onclick="showDeadlinePanel()" class="relative w-10 h-10 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 flex items-center justify-center transition" title="Thông báo deadline hôm nay">
+                        <span class="text-xl">🔔</span>
+                        <span id="notif-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">0</span>
+                    </button>
+                </div>
             </header>
             <main class="flex-1 overflow-auto p-6 scrollbar-hide" id="main-content"></main>
         </div>
@@ -65,7 +71,40 @@
         </div>
     </div>
 
-    <div id="modal-area"></div> 
+    <!-- Deadline Notification Panel -->
+    <div id="deadline-panel" class="modal-bg fixed inset-0 hidden flex items-start justify-end p-4 pt-16" onclick="if(event.target===this)closeDeadlinePanel()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm border overflow-hidden" onclick="event.stopPropagation()">
+            <div class="bg-gradient-to-r from-amber-500 to-orange-500 p-4 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">🔔</span>
+                    <div>
+                        <div class="font-black text-white text-sm">Deadline Hôm Nay</div>
+                        <div id="notif-panel-date" class="text-amber-100 text-[10px]"></div>
+                    </div>
+                </div>
+                <button onclick="closeDeadlinePanel()" class="text-white hover:text-amber-200 text-xl font-bold">✕</button>
+            </div>
+            <div id="notif-panel-body" class="max-h-96 overflow-y-auto divide-y"></div>
+            <div class="p-3 bg-slate-50 border-t flex gap-2">
+                <button onclick="requestNotifPermission()" id="notif-perm-btn" class="flex-1 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hidden">🔔 Bật thông báo trình duyệt</button>
+                <button onclick="closeDeadlinePanel()" class="flex-1 py-2 bg-slate-200 rounded-xl text-xs font-bold">Đóng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- In-app toast notification -->
+    <div id="deadline-toast" class="fixed bottom-6 right-6 hidden z-50 max-w-sm w-full">
+        <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl shadow-2xl p-4 flex items-start gap-3">
+            <span class="text-2xl flex-shrink-0">🔔</span>
+            <div class="flex-1 min-w-0">
+                <div class="font-black text-sm mb-1">Nhắc nhở deadline hôm nay!</div>
+                <div id="toast-msg" class="text-xs text-amber-100"></div>
+            </div>
+            <button onclick="closeToast()" class="text-amber-200 hover:text-white flex-shrink-0">✕</button>
+        </div>
+    </div>
+
+    <div id="modal-area"></div>
 
     <script>
         let SESSION = null;
@@ -150,6 +189,7 @@
                     const result = await res.json();
                     ALL_TASKS = result.data;
                     TASKS_DIRTY = false;
+                    checkAndNotifyDeadline();
                 } catch(e) { console.error('Lỗi tải dữ liệu:', e); }
             }
 
@@ -1171,6 +1211,161 @@
             document.getElementById('login-screen').classList.remove('hidden');
         })();
 
+        // =============================================
+        // DEADLINE NOTIFICATION SYSTEM
+        // =============================================
+
+        function getTodayDeadlineTasks() {
+            const today = new Date();
+            const todayStr = today.getFullYear() + '-'
+                + (today.getMonth()+1).toString().padStart(2,'0') + '-'
+                + today.getDate().toString().padStart(2,'0');
+            return ALL_TASKS.filter(t => {
+                if (String(t.user_id) !== String(SESSION.user.user_id)) return false;
+                if (t.status == 5) return false;
+                if (!t.due_date) return false;
+                const due = t.due_date.split('T')[0];
+                return due === todayStr;
+            });
+        }
+
+        function updateBellBadge() {
+            const tasks = getTodayDeadlineTasks();
+            const badge = document.getElementById('notif-badge');
+            if (!badge) return;
+            if (tasks.length > 0) {
+                badge.textContent = tasks.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        function showDeadlinePanel() {
+            const tasks = getTodayDeadlineTasks();
+            const today = new Date();
+            const dateStr = today.getDate().toString().padStart(2,'0') + '/'
+                + (today.getMonth()+1).toString().padStart(2,'0') + '/' + today.getFullYear();
+            document.getElementById('notif-panel-date').textContent = dateStr;
+
+            const body = document.getElementById('notif-panel-body');
+            if (tasks.length === 0) {
+                body.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">&#127881; Kh&#244;ng c&#243; c&#244;ng vi&#7879;c n&#224;o &#273;&#7871;n h&#7841;n h&#244;m nay!</div>';
+            } else {
+                body.innerHTML = tasks.map(t => {
+                    const statusColors = { 0: 'bg-gray-100 text-gray-600', 3: 'bg-blue-100 text-blue-700' };
+                    const cls = statusColors[t.status] || 'bg-gray-100 text-gray-600';
+                    const statusName = getStatusName(t.status);
+                    return '<div class="p-4 hover:bg-amber-50/50 cursor-pointer transition" onclick="closeDeadlinePanel();openTaskForm(' + JSON.stringify(t).replace(/"/g,'&quot;') + ')">'
+                        + '<div class="flex items-start gap-3">'
+                        + '<div class="w-2 h-2 rounded-full bg-orange-400 mt-2 flex-shrink-0"></div>'
+                        + '<div class="flex-1 min-w-0">'
+                        + '<div class="font-bold text-slate-800 text-sm truncate">' + t.task_name + '</div>'
+                        + '<div class="text-xs text-slate-400 mt-0.5">' + t.project_code + '</div>'
+                        + '<span class="inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase ' + cls + '">' + statusName + '</span>'
+                        + '</div></div></div>';
+                }).join('');
+            }
+
+            const permBtn = document.getElementById('notif-perm-btn');
+            if ('Notification' in window && Notification.permission === 'default') {
+                permBtn.classList.remove('hidden');
+            } else {
+                permBtn.classList.add('hidden');
+            }
+
+            document.getElementById('deadline-panel').classList.remove('hidden');
+        }
+
+        function closeDeadlinePanel() {
+            document.getElementById('deadline-panel').classList.add('hidden');
+        }
+
+        async function requestNotifPermission() {
+            if (!('Notification' in window)) { alert('Tr&#236;nh duy&#7879;t kh&#244;ng h&#7895; tr&#7907; th&#244;ng b&#225;o.'); return; }
+            const perm = await Notification.requestPermission();
+            document.getElementById('notif-perm-btn').classList.add('hidden');
+            if (perm === 'granted') sendBrowserNotifications();
+        }
+
+        function sendBrowserNotifications() {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            const tasks = getTodayDeadlineTasks();
+            if (tasks.length === 0) return;
+            const lines = tasks.slice(0, 5).map(t => '• ' + t.task_name + ' (' + t.project_code + ')').join('\n')
+                + (tasks.length > 5 ? ('\n...và ' + (tasks.length - 5) + ' công việc khác') : '');
+            try {
+                new Notification('🔔 Task System – Deadline Hôm Nay', {
+                    body: 'Bạn có ' + tasks.length + ' công việc đến hạn hôm nay chưa hoàn thành:\n' + lines,
+                    tag: 'deadline-today',
+                    requireInteraction: false
+                });
+            } catch(e) { console.warn('Notification error:', e); }
+        }
+
+        function showToastNotification(tasks) {
+            if (tasks.length === 0) return;
+            const msg = tasks.length === 1
+                ? '"' + tasks[0].task_name + '" đến hạn hôm nay.'
+                : tasks.length + ' công việc đến hạn hôm nay chưa hoàn thành.';
+            document.getElementById('toast-msg').textContent = msg;
+            const toast = document.getElementById('deadline-toast');
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 8000);
+        }
+
+        function closeToast() {
+            document.getElementById('deadline-toast').classList.add('hidden');
+        }
+
+        function checkAndNotifyDeadline() {
+            const tasks = getTodayDeadlineTasks();
+            updateBellBadge();
+            if (tasks.length === 0) return;
+            const todayKey = 'deadline_notified_' + new Date().toISOString().slice(0,10) + '_' + (SESSION.user ? SESSION.user.user_id : '');
+            if (!localStorage.getItem(todayKey)) {
+                localStorage.setItem(todayKey, '1');
+                // Clean old keys
+                Object.keys(localStorage).filter(k => k.startsWith('deadline_notified_')).sort().slice(0, -7).forEach(k => localStorage.removeItem(k));
+                showToastNotification(tasks);
+                sendBrowserNotifications();
+            }
+        }
+
     </script>
+
+    <!-- Deadline Notification Panel -->
+    <div id="deadline-panel" class="modal-bg fixed inset-0 hidden flex items-start justify-end p-4 pt-16" onclick="if(event.target===this)closeDeadlinePanel()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm border overflow-hidden" onclick="event.stopPropagation()">
+            <div class="bg-gradient-to-r from-amber-500 to-orange-500 p-4 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">&#128276;</span>
+                    <div>
+                        <div class="font-black text-white text-sm">Deadline H&#244;m Nay</div>
+                        <div id="notif-panel-date" class="text-amber-100 text-[10px]"></div>
+                    </div>
+                </div>
+                <button onclick="closeDeadlinePanel()" class="text-white hover:text-amber-200 text-xl font-bold">&#10005;</button>
+            </div>
+            <div id="notif-panel-body" class="max-h-96 overflow-y-auto divide-y"></div>
+            <div class="p-3 bg-slate-50 border-t flex gap-2">
+                <button onclick="requestNotifPermission()" id="notif-perm-btn" class="flex-1 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hidden">&#128276; B&#7853;t th&#244;ng b&#225;o tr&#236;nh duy&#7879;t</button>
+                <button onclick="closeDeadlinePanel()" class="flex-1 py-2 bg-slate-200 rounded-xl text-xs font-bold">&#272;&#243;ng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- In-app toast notification -->
+    <div id="deadline-toast" class="fixed bottom-6 right-6 hidden z-50 max-w-sm w-full">
+        <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-2xl shadow-2xl p-4 flex items-start gap-3">
+            <span class="text-2xl flex-shrink-0">&#128276;</span>
+            <div class="flex-1 min-w-0">
+                <div class="font-black text-sm mb-1">Nh&#7855;c nh&#7903; deadline h&#244;m nay!</div>
+                <div id="toast-msg" class="text-xs text-amber-100"></div>
+            </div>
+            <button onclick="closeToast()" class="text-amber-200 hover:text-white flex-shrink-0">&#10005;</button>
+        </div>
+    </div>
+
 </body>
 </html>
