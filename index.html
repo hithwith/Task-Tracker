@@ -4,7 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hệ thống Quản lý Công việc</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Tắt warning của Tailwind CDN (chỉ ảnh hưởng warning này)
+        const _warn = console.warn.bind(console);
+        console.warn = (...args) => { if (args[0] && String(args[0]).includes('cdn.tailwindcss.com')) return; _warn(...args); };
+    </script>
+    <script>tailwind = { config: {} }</script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+    <script>tailwind.config = { corePlugins: { preflight: true } }</script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <style>
@@ -27,7 +34,7 @@
         <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md border-t-8 border-blue-600">
             <h2 class="text-3xl font-black mb-8 text-center text-slate-800 tracking-tight">TASK SYSTEM</h2>
             <div class="space-y-4">
-                <input type="text" id="unit_name" class="w-full p-3 border-2 rounded-xl focus:border-blue-500 outline-none transition" placeholder="Mã đơn vị" value="ARITO">
+                <input type="hidden" id="unit_name" value="ARITO">
                 <input type="text" id="username" class="w-full p-3 border-2 rounded-xl focus:border-blue-500 outline-none transition" placeholder="Tên đăng nhập">
                 <input type="password" id="password" class="w-full p-3 border-2 rounded-xl focus:border-blue-500 outline-none transition" placeholder="Mật khẩu">
                 <button onclick="handleLogin()" id="login-btn" class="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 shadow-lg transform active:scale-95 transition">ĐĂNG NHẬP</button>
@@ -128,6 +135,8 @@
         }
 
         async function handleLogin() {
+            const btn = document.getElementById('login-btn');
+            btn.innerText = 'ĐANG ĐĂNG NHẬP...'; btn.disabled = true;
             const data = { action: 'login', data: {
                 username: document.getElementById('username').value,
                 password: document.getElementById('password').value,
@@ -140,8 +149,14 @@
                     SESSION = result;
                     localStorage.setItem('arito_qlcv_session', JSON.stringify(result));
                     initApp();
-                } else { alert("Sai thông tin đăng nhập!"); }
-            } catch (e) { alert("Lỗi kết nối API. Vui lòng kiểm tra lại Link App Script."); }
+                } else {
+                    alert("Sai thông tin đăng nhập!");
+                    btn.innerText = 'ĐĂNG NHẬP'; btn.disabled = false;
+                }
+            } catch (e) {
+                alert("Lỗi kết nối API. Vui lòng kiểm tra lại Link App Script.");
+                btn.innerText = 'ĐĂNG NHẬP'; btn.disabled = false;
+            }
         }
 
         async function initApp() {
@@ -168,11 +183,51 @@
                 </div>`;
 
             document.getElementById('sidebar-menu').innerHTML = apiMenuHtml + reportMenuHtml;
+            document.getElementById('page-title').innerText = 'Tổng hợp công việc';
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
+            document.getElementById('menu-10.01')?.classList.add('active-menu');
+            currentMenuId = '10.01';
 
-            const resData = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getInitialData' }) });
-            MASTER_DATA = await resData.json();
+            // Hiện skeleton ngay lập tức
+            document.getElementById('main-content').innerHTML = `
+                <div class="bg-white p-6 rounded-2xl shadow-sm border mb-6 animate-pulse">
+                    <div class="flex gap-4"><div class="flex-1 h-10 bg-slate-100 rounded-xl"></div><div class="w-32 h-10 bg-slate-100 rounded-xl"></div><div class="w-32 h-10 bg-blue-100 rounded-xl"></div></div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                    ${[1,2,3,4,5].map(() => `<div class="flex gap-4 p-5 border-b animate-pulse">
+                        <div class="w-20 h-4 bg-slate-100 rounded"></div>
+                        <div class="flex-1 space-y-2"><div class="h-4 bg-slate-100 rounded w-3/4"></div><div class="h-3 bg-slate-50 rounded w-1/3"></div></div>
+                        <div class="w-20 h-4 bg-slate-100 rounded"></div>
+                        <div class="w-24 h-4 bg-slate-100 rounded"></div>
+                        <div class="w-16 h-6 bg-slate-100 rounded-full"></div>
+                        <div class="w-20 h-6 bg-blue-50 rounded"></div>
+                    </div>`).join('')}
+                </div>`;
 
-            switchMenu('10.01', 'Tổng hợp công việc');
+            // Lấy master data từ cache trước nếu có
+            try {
+                const cached = localStorage.getItem('arito_master_data_' + SESSION.unit.unit_id);
+                if (cached) MASTER_DATA = JSON.parse(cached);
+            } catch(e) {}
+
+            // Fetch song song cả 2 API
+            try {
+                const [mdRes, taskRes] = await Promise.all([
+                    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getInitialData' }) }),
+                    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getTasks', data: { unit_id: SESSION.unit.unit_id } }) })
+                ]);
+                const [md, taskResult] = await Promise.all([mdRes.json(), taskRes.json()]);
+                MASTER_DATA = md;
+                ALL_TASKS = taskResult.data || [];
+                TASKS_DIRTY = false;
+                // Cập nhật cache
+                try { localStorage.setItem('arito_master_data_' + SESSION.unit.unit_id, JSON.stringify(md)); } catch(e) {}
+                checkAndNotifyDeadline();
+            } catch(e) {
+                console.error('Lỗi tải dữ liệu:', e);
+            }
+
+            renderTable1001();
         }
 
         async function switchMenu(menuId, text) {
@@ -187,7 +242,7 @@
                 try {
                     const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getTasks', data: { unit_id: SESSION.unit.unit_id } })});
                     const result = await res.json();
-                    ALL_TASKS = result.data;
+                    ALL_TASKS = result.data || [];
                     TASKS_DIRTY = false;
                     checkAndNotifyDeadline();
                 } catch(e) { console.error('Lỗi tải dữ liệu:', e); }
@@ -638,11 +693,31 @@
                             <div class="col-span-2"><label class="text-[10px] font-black uppercase text-slate-400">Tên công việc *</label><input type="text" name="task_name" required value="${t?.task_name || ''}" class="w-full p-3 border-2 rounded-xl outline-none focus:border-blue-400"></div>
                             <div class="col-span-2"><label class="text-[10px] font-black uppercase text-slate-400">Mô tả</label><textarea name="description" class="w-full p-3 border-2 rounded-xl h-20 outline-none">${t?.description || ''}</textarea></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Dự án</label><select name="project_code" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.projects.filter(p => p.status == 1).map(p => `<option value="${p.project_code}" ${t?.project_code == p.project_code ? 'selected' : ''}>${p.project_name}</option>`).join('')}</select></div>
-                            <div><label class="text-[10px] font-black uppercase text-slate-400">Người thực hiện</label><select name="user_id" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${t?.user_id == u.user_id ? 'selected' : (isEdit ? '' : (SESSION.user.user_id == u.user_id ? 'selected' : ''))}>${u.username}</option>`).join('')}</select></div>
+                            <div><label class="text-[10px] font-black uppercase text-slate-400">Người thực hiện</label><select name="user_id" id="task_user_id" onchange="onTaskUserChange()" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${t?.user_id == u.user_id ? 'selected' : (isEdit ? '' : (SESSION.user.user_id == u.user_id ? 'selected' : ''))}>${u.username}</option>`).join('')}</select></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Ngày bắt đầu</label><input type="text" name="start_date" class="date-mask w-full p-3 border-2 rounded-xl" placeholder="DD/MM/YYYY" maxlength="10" value="${formatDate(t?.start_date || new Date().toISOString())}"></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Ngày đến hạn *</label><input type="text" name="due_date" required class="date-mask w-full p-3 border-2 rounded-xl" placeholder="DD/MM/YYYY" maxlength="10" value="${t?.due_date ? formatDate(t.due_date) : ''}"></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Ưu tiên</label><select name="priority" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.priorities.map(p => `<option value="${p.priority_code}" ${t?.priority == p.priority_code ? 'selected' : ''}>${p.priority_name}</option>`).join('')}</select></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Trạng thái</label><select name="status" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.statuses.map(s => `<option value="${s.status_code}" ${t?.status == s.status_code ? 'selected' : ''}>${s.status_name}</option>`).join('')}</select></div>
+                            <div class="col-span-2 relative" id="noti_user_wrapper">
+                                <label class="text-[10px] font-black uppercase text-slate-400">Người nhận thông báo</label>
+                                <div id="noti_user_trigger" onclick="toggleNotiDropdown()" class="mt-1 w-full p-3 border-2 rounded-xl flex items-center justify-between cursor-pointer hover:border-blue-400 transition select-none bg-white">
+                                    <span id="noti_user_display" class="text-sm text-slate-500 truncate">-- Chưa chọn --</span>
+                                    <span class="text-slate-400 text-xs ml-2 flex-shrink-0" id="noti_user_arrow">▼</span>
+                                </div>
+                                <div id="noti_user_dropdown" class="hidden absolute z-50 left-0 right-0 mt-1 bg-white border-2 border-blue-300 rounded-xl shadow-xl overflow-hidden">
+                                    <div class="p-2 border-b bg-slate-50 flex gap-2">
+                                        <button type="button" onclick="notiSelectAll(true)" class="flex-1 text-[10px] font-black py-1 bg-blue-100 text-blue-700 rounded-lg">Chọn tất cả</button>
+                                        <button type="button" onclick="notiSelectAll(false)" class="flex-1 text-[10px] font-black py-1 bg-slate-200 text-slate-600 rounded-lg">Bỏ chọn</button>
+                                    </div>
+                                    <div class="max-h-44 overflow-y-auto" id="noti_user_list">
+                                        ${MASTER_DATA.users.map(u => {
+                                            const existingNoti = t?.noti_user ? String(t.noti_user).split(',').map(x=>x.trim()) : [];
+                                            const checked = existingNoti.includes(String(u.user_id));
+                                            return '<label class="flex items-center gap-2.5 px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-slate-50 last:border-0"><input type="checkbox" class="noti-user-cb w-4 h-4 accent-blue-600" value="' + u.user_id + '" onchange="updateNotiDisplay()" ' + (checked ? 'checked' : '') + '> <span class="font-medium text-slate-700">' + u.username + '</span></label>';
+                                        }).join('')}
+                                    </div>
+                                </div>
+                            </div>
                             <div class="col-span-2 flex justify-between mt-4 border-t pt-6">
                                 ${isEdit ? `<button type="button" onclick="doDeleteTask('${t.id}')" class="px-6 py-3 bg-red-100 text-red-600 rounded-xl font-bold">XÓA DÒNG</button>` : '<div></div>'}
                                 <div class="flex gap-3"><button type="button" onclick="closeModal('task-modal')" class="px-8 py-3 bg-gray-100 rounded-xl font-bold">HỦY</button><button type="submit" class="px-10 py-3 bg-blue-600 text-white rounded-xl font-black shadow-lg shadow-blue-200">LƯU THÔNG TIN</button></div>
@@ -652,6 +727,7 @@
                 </div>`;
             document.getElementById('modal-area').innerHTML = html;
             initDateMasks();
+            updateNotiDisplay();
             document.getElementById('form-task').onsubmit = async (e) => {
                 e.preventDefault();
                 const formData = new FormData(e.target);
@@ -664,13 +740,21 @@
                     }
                 });
                 data.unit_id = SESSION.unit.unit_id;
+                // Thu thập noti_user từ các checkbox
+                const notiChecked = Array.from(document.querySelectorAll('.noti-user-cb:checked')).map(cb => cb.value);
+                data.noti_user = notiChecked.join(',');
                 const isNewTask = !data.id;
                 const _now = new Date();
-                // Format giống datetime0: DD/MM/YYYY H:MM:SS (giờ local, không padding giờ)
                 const nowIso = `${_now.getDate().toString().padStart(2,'0')}/${(_now.getMonth()+1).toString().padStart(2,'0')}/${_now.getFullYear()} ${_now.getHours()}:${_now.getMinutes().toString().padStart(2,'0')}:${_now.getSeconds().toString().padStart(2,'0')}`;
 
-                // Tính toán các trường bổ sung trước khi tạo apiPayload
-                // datetime2: ISO full string giống datetime0 — tạo mới & sửa đều gán thời điểm hiện tại
+                // Người tạo (user_id0): chỉ gán lần đầu tạo mới
+                if (isNewTask) {
+                    data.user_id0 = SESSION.user.user_id;
+                }
+                // Người sửa gần nhất (user_id2): gán mỗi lần lưu
+                data.user_id2 = SESSION.user.user_id;
+
+                // datetime2: thời điểm sửa gần nhất
                 data.datetime2 = nowIso;
                 if (!isNewTask) {
 
@@ -961,6 +1045,70 @@
         function initDateMasks() {
             document.querySelectorAll('.date-mask').forEach(applyDateMask);
         }
+
+        // Tự động nhảy Người nhận thông báo khi Người thực hiện thay đổi
+        function onTaskUserChange() {
+            const selUserId = document.getElementById('task_user_id')?.value;
+            const currentUserId = String(SESSION.user.user_id);
+            if (selUserId && selUserId !== currentUserId) {
+                const cbs = document.querySelectorAll('.noti-user-cb');
+                cbs.forEach(cb => {
+                    if (String(cb.value) === currentUserId) cb.checked = true;
+                });
+                updateNotiDisplay();
+            }
+        }
+
+        function toggleNotiDropdown() {
+            const dd = document.getElementById('noti_user_dropdown');
+            const arrow = document.getElementById('noti_user_arrow');
+            if (!dd) return;
+            const isHidden = dd.classList.contains('hidden');
+            dd.classList.toggle('hidden', !isHidden);
+            arrow.textContent = isHidden ? '▲' : '▼';
+            if (isHidden) {
+                // Đóng khi click ngoài
+                setTimeout(() => {
+                    document.addEventListener('click', closeNotiOnOutside, { once: false });
+                }, 0);
+            } else {
+                document.removeEventListener('click', closeNotiOnOutside);
+            }
+        }
+
+        function closeNotiOnOutside(e) {
+            const wrapper = document.getElementById('noti_user_wrapper');
+            if (wrapper && !wrapper.contains(e.target)) {
+                document.getElementById('noti_user_dropdown')?.classList.add('hidden');
+                const arrow = document.getElementById('noti_user_arrow');
+                if (arrow) arrow.textContent = '▼';
+                document.removeEventListener('click', closeNotiOnOutside);
+            }
+        }
+
+        function updateNotiDisplay() {
+            const checked = Array.from(document.querySelectorAll('.noti-user-cb:checked'));
+            const display = document.getElementById('noti_user_display');
+            if (!display) return;
+            if (checked.length === 0) {
+                display.textContent = '-- Chưa chọn --';
+                display.classList.add('text-slate-400');
+                display.classList.remove('text-slate-800');
+            } else {
+                const names = checked.map(cb => {
+                    const u = MASTER_DATA.users.find(u => String(u.user_id) === String(cb.value));
+                    return u ? u.username : cb.value;
+                });
+                display.textContent = names.join(', ');
+                display.classList.remove('text-slate-400');
+                display.classList.add('text-slate-800', 'font-medium');
+            }
+        }
+
+        function notiSelectAll(val) {
+            document.querySelectorAll('.noti-user-cb').forEach(cb => cb.checked = val);
+            updateNotiDisplay();
+        }
         function formatDate(d) {
             if (!d) return '-';
             const date = parseLocalDate(d);
@@ -1054,19 +1202,19 @@
                                 + '</div>'
                                 + doingTasks.map(t => {
                                     const hrs = t.act_time ? (parseFloat(t.act_time)/3600).toFixed(2) : null;
-                                    return '<div class="text-[8px] bg-blue-100 text-blue-700 p-1 mb-0.5 rounded-md font-bold truncate" title="' + t.task_name + '">'
-                                        + '\uD83D\uDD04 ' + t.task_name + (hrs ? ' (' + hrs + 'h)' : '') + '</div>';
+                                    return '<div class="text-[8px] bg-blue-100 text-blue-700 p-1 mb-0.5 rounded-md font-bold truncate" title="' + t.task_name + ' – ' + getUserName(t.user_id) + '">'
+                                        + '\uD83D\uDD04 ' + t.task_name + (hrs ? ' (' + hrs + 'h)' : '') + '<span class="ml-1 opacity-60">@' + getUserName(t.user_id) + '</span></div>';
                                 }).join('')
                                 + doneTasks.map(t => {
                                     const hrs = t.act_time ? (parseFloat(t.act_time)/3600).toFixed(2) : null;
-                                    return '<div class="text-[8px] bg-emerald-100 text-emerald-700 p-1 mb-0.5 rounded-md font-bold truncate" title="' + t.task_name + '">'
-                                        + '\u2705 ' + t.task_name + (hrs ? ' (' + hrs + 'h)' : '') + '</div>';
+                                    return '<div class="text-[8px] bg-emerald-100 text-emerald-700 p-1 mb-0.5 rounded-md font-bold truncate" title="' + t.task_name + ' – ' + getUserName(t.user_id) + '">'
+                                        + '\u2705 ' + t.task_name + (hrs ? ' (' + hrs + 'h)' : '') + '<span class="ml-1 opacity-60">@' + getUserName(t.user_id) + '</span></div>';
                                 }).join('')
                                 + '</div>';
                         }).join('')}
                     </div>
                     <div class="mt-6 p-4 bg-slate-50 rounded-xl border">
-                        <div class="grid grid-cols-3 gap-4 text-center">
+                        <div class="grid grid-cols-3 gap-4 text-center mb-4">
                             <div>
                                 <div class="text-2xl font-black text-slate-800">${monthTasks.length}</div>
                                 <div class="text-[10px] font-black text-slate-400 uppercase mt-1">Tổng công việc</div>
@@ -1080,6 +1228,29 @@
                                 <div class="text-[10px] font-black text-slate-400 uppercase mt-1">Tổng giờ làm</div>
                             </div>
                         </div>
+                        ${(() => {
+                            // Nhóm theo người thực hiện
+                            const byUser = {};
+                            monthTasks.forEach(t => {
+                                const uid = t.user_id;
+                                if (!byUser[uid]) byUser[uid] = { tasks: 0, done: 0, hours: 0 };
+                                byUser[uid].tasks++;
+                                if (t.status == 5) byUser[uid].done++;
+                                byUser[uid].hours += (parseFloat(t.act_time) || 0);
+                            });
+                            const entries = Object.entries(byUser);
+                            if (entries.length <= 1) return '';
+                            return '<div class="border-t pt-3 mt-2">'
+                                + '<div class="text-[10px] font-black text-slate-400 uppercase mb-2">Chi tiết theo Người thực hiện</div>'
+                                + '<div class="space-y-1">'
+                                + entries.map(([uid, v]) => 
+                                    '<div class="flex items-center justify-between text-xs py-1 px-2 rounded-lg hover:bg-white">'
+                                    + '<span class="font-bold text-slate-700">' + getUserName(uid) + '</span>'
+                                    + '<span class="text-slate-500">' + v.tasks + ' việc &bull; ' + v.done + ' xong &bull; ' + (v.hours/3600).toFixed(2) + 'h</span>'
+                                    + '</div>'
+                                ).join('')
+                                + '</div></div>';
+                        })()}
                     </div>
                 </div>`;
         }
@@ -1202,6 +1373,9 @@
                 if (saved) {
                     SESSION = JSON.parse(saved);
                     if (SESSION && SESSION.status === 'success' && SESSION.user && SESSION.unit) {
+                        // Hiện app ngay, tránh màn trắng trong khi await initApp
+                        document.getElementById('login-screen').classList.add('hidden');
+                        document.getElementById('main-app').classList.remove('hidden');
                         initApp();
                         return;
                     }
@@ -1214,6 +1388,27 @@
         // =============================================
         // DEADLINE NOTIFICATION SYSTEM
         // =============================================
+
+        // =============================================
+        // NOTIFICATION READ STATE (localStorage)
+        // =============================================
+        function _notiKey(type) {
+            return 'noti_read_' + type + '_' + (SESSION?.user?.user_id || '');
+        }
+        function getReadIds(type) {
+            try { return new Set(JSON.parse(localStorage.getItem(_notiKey(type)) || '[]')); } catch { return new Set(); }
+        }
+        function markRead(type, id) {
+            const ids = getReadIds(type);
+            ids.add(String(id));
+            localStorage.setItem(_notiKey(type), JSON.stringify([...ids]));
+        }
+        function markAllRead(type, ids) {
+            const existing = getReadIds(type);
+            ids.forEach(id => existing.add(String(id)));
+            localStorage.setItem(_notiKey(type), JSON.stringify([...existing]));
+        }
+        function isRead(type, id) { return getReadIds(type).has(String(id)); }
 
         function getTodayDeadlineTasks() {
             const today = new Date();
@@ -1229,12 +1424,40 @@
             });
         }
 
+        function getNewAssignedTasks() {
+            return ALL_TASKS.filter(t => {
+                if (t.status == 5) return false;
+                if (String(t.user_id) !== String(SESSION.user.user_id)) return false;
+                if (!t.user_id0) return false;
+                if (isRead('assigned', t.id)) return false;
+                return String(t.user_id0) !== String(t.user_id);
+            });
+        }
+
+        function getUpcomingNotiTasks() {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const limit = new Date(today); limit.setDate(limit.getDate() + 3);
+            return ALL_TASKS.filter(t => {
+                if (t.status == 5) return false;
+                if (String(t.user_id) === String(SESSION.user.user_id)) return false;
+                if (!t.due_date || !t.noti_user) return false;
+                if (isRead('noti', t.id)) return false;
+                const notiIds = String(t.noti_user).split(',').map(x => x.trim());
+                if (!notiIds.includes(String(SESSION.user.user_id))) return false;
+                const d = new Date(t.due_date.split('T')[0]);
+                return d >= today && d <= limit;
+            });
+        }
+
         function updateBellBadge() {
-            const tasks = getTodayDeadlineTasks();
+            const tasks = getTodayDeadlineTasks().filter(t => !isRead('deadline', t.id));
+            const notiTasks = getUpcomingNotiTasks();
+            const newAssigned = getNewAssignedTasks();
             const badge = document.getElementById('notif-badge');
             if (!badge) return;
-            if (tasks.length > 0) {
-                badge.textContent = tasks.length;
+            const total = tasks.length + notiTasks.length + newAssigned.length;
+            if (total > 0) {
+                badge.textContent = total;
                 badge.classList.remove('hidden');
             } else {
                 badge.classList.add('hidden');
@@ -1242,30 +1465,114 @@
         }
 
         function showDeadlinePanel() {
-            const tasks = getTodayDeadlineTasks();
+            const allDeadline  = getTodayDeadlineTasks();
+            const notiTasks    = getUpcomingNotiTasks();
+            const newAssigned  = getNewAssignedTasks();
+            // deadline: chia thành chưa đọc / đã đọc
+            const unreadDL  = allDeadline.filter(t => !isRead('deadline', t.id));
+            const readDL    = allDeadline.filter(t =>  isRead('deadline', t.id));
+
             const today = new Date();
             const dateStr = today.getDate().toString().padStart(2,'0') + '/'
                 + (today.getMonth()+1).toString().padStart(2,'0') + '/' + today.getFullYear();
             document.getElementById('notif-panel-date').textContent = dateStr;
 
             const body = document.getElementById('notif-panel-body');
-            if (tasks.length === 0) {
-                body.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">&#127881; Kh&#244;ng c&#243; c&#244;ng vi&#7879;c n&#224;o &#273;&#7871;n h&#7841;n h&#244;m nay!</div>';
-            } else {
-                body.innerHTML = tasks.map(t => {
-                    const statusColors = { 0: 'bg-gray-100 text-gray-600', 3: 'bg-blue-100 text-blue-700' };
-                    const cls = statusColors[t.status] || 'bg-gray-100 text-gray-600';
-                    const statusName = getStatusName(t.status);
-                    return '<div class="p-4 hover:bg-amber-50/50 cursor-pointer transition" onclick="closeDeadlinePanel();openTaskForm(' + JSON.stringify(t).replace(/"/g,'&quot;') + ')">'
-                        + '<div class="flex items-start gap-3">'
-                        + '<div class="w-2 h-2 rounded-full bg-orange-400 mt-2 flex-shrink-0"></div>'
-                        + '<div class="flex-1 min-w-0">'
-                        + '<div class="font-bold text-slate-800 text-sm truncate">' + t.task_name + '</div>'
-                        + '<div class="text-xs text-slate-400 mt-0.5">' + t.project_code + '</div>'
-                        + '<span class="inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase ' + cls + '">' + statusName + '</span>'
-                        + '</div></div></div>';
+            let html = '';
+
+            const totalUnread = unreadDL.length + notiTasks.length + newAssigned.length;
+
+            if (allDeadline.length === 0 && notiTasks.length === 0 && newAssigned.length === 0) {
+                body.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">&#127881; Không có thông báo nào!</div>';
+                document.getElementById('deadline-panel').classList.remove('hidden');
+                return;
+            }
+
+            // helper: nút đánh dấu đã đọc từng item
+            const readBtn = (type, id) =>
+                '<button onclick="event.stopPropagation();markNotiRead(\'' + type + '\',\'' + id + '\')" '
+                + 'class="flex-shrink-0 text-[10px] text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg px-2 py-1 ml-2 whitespace-nowrap">Đã đọc</button>';
+
+            // --- Công việc mới được giao ---
+            if (newAssigned.length > 0) {
+                html += '<div class="px-4 py-2 bg-green-50 flex items-center justify-between border-b">'
+                    + '<span class="text-[10px] font-black text-green-700 uppercase tracking-widest">Công việc mới được giao</span>'
+                    + '<button onclick="markAllNotiRead(\'assigned\',[' + newAssigned.map(t=>'\''+t.id+'\'').join(',') + '])" class="text-[10px] text-green-600 font-bold hover:underline">Đọc tất cả</button>'
+                    + '</div>';
+                html += newAssigned.map(t => {
+                    const creatorName = getUserName(t.user_id0);
+                    return '<div class="p-4 hover:bg-green-50/50 transition border-b last:border-0">'
+                        + '<div class="flex items-start gap-2">'
+                        + '<div class="w-2 h-2 rounded-full bg-green-500 mt-2 flex-shrink-0"></div>'
+                        + '<div class="flex-1 min-w-0 cursor-pointer" onclick="closeDeadlinePanel();openTaskForm(' + JSON.stringify(t).replace(/"/g,'&quot;') + ')">'
+                        + '<div class="font-bold text-slate-800 text-sm">Bạn vừa nhận được công việc mới từ ' + creatorName + '</div>'
+                        + '<div class="text-xs text-slate-500 mt-0.5 truncate">' + t.task_name + ' – ' + t.project_code + '</div>'
+                        + '</div>'
+                        + readBtn('assigned', t.id)
+                        + '</div></div>';
                 }).join('');
             }
+
+            // --- Deadline hôm nay chưa đọc ---
+            if (unreadDL.length > 0) {
+                html += '<div class="px-4 py-2 bg-orange-50 flex items-center justify-between border-b border-t">'
+                    + '<span class="text-[10px] font-black text-orange-600 uppercase tracking-widest">Deadline hôm nay</span>'
+                    + '<button onclick="markAllNotiRead(\'deadline\',[' + unreadDL.map(t=>'\''+t.id+'\'').join(',') + '])" class="text-[10px] text-orange-600 font-bold hover:underline">Đọc tất cả</button>'
+                    + '</div>';
+                html += unreadDL.map(t => {
+                    const statusColors = { 0: 'bg-gray-100 text-gray-600', 3: 'bg-blue-100 text-blue-700' };
+                    const cls = statusColors[t.status] || 'bg-gray-100 text-gray-600';
+                    return '<div class="p-4 hover:bg-amber-50/50 transition border-b last:border-0">'
+                        + '<div class="flex items-start gap-2">'
+                        + '<div class="w-2 h-2 rounded-full bg-orange-400 mt-2 flex-shrink-0"></div>'
+                        + '<div class="flex-1 min-w-0 cursor-pointer" onclick="closeDeadlinePanel();openTaskForm(' + JSON.stringify(t).replace(/"/g,'&quot;') + ')">'
+                        + '<div class="font-bold text-slate-800 text-sm truncate">' + t.task_name + '</div>'
+                        + '<div class="text-xs text-slate-400 mt-0.5">' + t.project_code + '</div>'
+                        + '<span class="inline-block mt-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase ' + cls + '">' + getStatusName(t.status) + '</span>'
+                        + '</div>'
+                        + readBtn('deadline', t.id)
+                        + '</div></div>';
+                }).join('');
+            }
+
+            // --- Deadline đã đọc (thu gọn) ---
+            if (readDL.length > 0) {
+                html += '<details class="border-t"><summary class="px-4 py-2 bg-slate-50 text-[10px] font-black text-slate-400 uppercase cursor-pointer select-none">Đã đọc (' + readDL.length + ')</summary>';
+                html += readDL.map(t => {
+                    return '<div class="p-3 opacity-50 border-b last:border-0 cursor-pointer hover:opacity-80 transition" onclick="closeDeadlinePanel();openTaskForm(' + JSON.stringify(t).replace(/"/g,'&quot;') + ')">'
+                        + '<div class="flex items-center gap-2">'
+                        + '<div class="w-2 h-2 rounded-full bg-slate-300 flex-shrink-0"></div>'
+                        + '<div class="flex-1 min-w-0">'
+                        + '<div class="text-xs font-bold text-slate-600 truncate">' + t.task_name + '</div>'
+                        + '<div class="text-[10px] text-slate-400">' + t.project_code + '</div>'
+                        + '</div></div></div>';
+                }).join('');
+                html += '</details>';
+            }
+
+            // --- Sắp đến hạn (noti_user) ---
+            if (notiTasks.length > 0) {
+                html += '<div class="px-4 py-2 bg-purple-50 flex items-center justify-between border-t">'
+                    + '<span class="text-[10px] font-black text-purple-600 uppercase tracking-widest">Sắp đến hạn</span>'
+                    + '<button onclick="markAllNotiRead(\'noti\',[' + notiTasks.map(t=>'\''+t.id+'\'').join(',') + '])" class="text-[10px] text-purple-600 font-bold hover:underline">Đọc tất cả</button>'
+                    + '</div>';
+                html += notiTasks.map(t => {
+                    const assignee = getUserName(t.user_id);
+                    const dueDisplay = t.due_date ? formatDate(t.due_date) : '';
+                    return '<div class="p-4 hover:bg-purple-50/50 transition border-b last:border-0">'
+                        + '<div class="flex items-start gap-2">'
+                        + '<div class="w-2 h-2 rounded-full bg-purple-400 mt-2 flex-shrink-0"></div>'
+                        + '<div class="flex-1 min-w-0 cursor-pointer" onclick="closeDeadlinePanel();openTaskForm(' + JSON.stringify(t).replace(/"/g,'&quot;') + ')">'
+                        + '<div class="font-bold text-slate-800 text-sm">Có công việc sắp đến hạn của ' + assignee + '</div>'
+                        + '<div class="text-xs text-slate-500 mt-0.5 truncate">' + t.task_name + ' – ' + t.project_code + '</div>'
+                        + '<div class="text-[10px] text-purple-500 font-bold mt-0.5">Hạn: ' + dueDisplay + '</div>'
+                        + '</div>'
+                        + readBtn('noti', t.id)
+                        + '</div></div>';
+                }).join('');
+            }
+
+            body.innerHTML = html;
 
             const permBtn = document.getElementById('notif-perm-btn');
             if ('Notification' in window && Notification.permission === 'default') {
@@ -1275,6 +1582,18 @@
             }
 
             document.getElementById('deadline-panel').classList.remove('hidden');
+        }
+
+        function markNotiRead(type, id) {
+            markRead(type, String(id));
+            updateBellBadge();
+            showDeadlinePanel(); // re-render panel
+        }
+
+        function markAllNotiRead(type, ids) {
+            markAllRead(type, ids);
+            updateBellBadge();
+            showDeadlinePanel();
         }
 
         function closeDeadlinePanel() {
