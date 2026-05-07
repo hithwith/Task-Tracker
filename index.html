@@ -27,7 +27,7 @@
 
     <script>
         // Link API của bạn
-        const API_URL = 'https://script.google.com/macros/s/AKfycbwtj9hbk4gRWQ8lDA8PlEzcBkpCHGDtwLGO3QO6bjmXXJ6sRKjs6IrtBtujrSDmnNksUQ/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbySPmJiCRiTzCTSpYkcg4WGYYggu9RcARxyt3SA-RZwMGlHeE20Ku87-LsrujyazcBhRA/exec';
     </script>
 
     <div id="login-screen" class="hidden min-h-screen flex items-center justify-center bg-slate-900">
@@ -164,8 +164,11 @@
             document.getElementById('main-app').classList.remove('hidden');
             document.getElementById('user-display').innerText = SESSION.user.fullname;
 
+            const isAdmin = SESSION.user.admin == 1 || SESSION.user.admin === true || SESSION.user.admin === '1';
+
             const apiMenuHtml = (SESSION.menus || [])
                 .filter(m => m.menu_id !== '10.05.01' && m.menu_id !== '10.05.02')
+                .filter(m => m.menu_id !== '10.04' || isAdmin)
                 .map(m => `<a href="javascript:void(0)" onclick="switchMenu('${m.menu_id}', '${m.text}')"
                    id="menu-${m.menu_id}" class="sidebar-item flex items-center p-4 rounded-xl text-sm font-bold transition">${m.text}</a>`).join('');
 
@@ -176,10 +179,10 @@
                        id="menu-10.05.01" class="sidebar-item flex items-center pl-6 pr-4 py-3 rounded-xl text-xs font-bold transition">
                        &#128197; Thống kê thời gian cá nhân
                     </a>
-                    <a href="javascript:void(0)" onclick="switchMenu('10.05.02','Báo cáo tổng tình hình làm việc phòng')"
+                    ${isAdmin ? `<a href="javascript:void(0)" onclick="switchMenu('10.05.02','Báo cáo tổng tình hình làm việc phòng')"
                        id="menu-10.05.02" class="sidebar-item flex items-center pl-6 pr-4 py-3 rounded-xl text-xs font-bold transition">
                        &#128200; Thống kê thời gian làm việc phòng
-                    </a>
+                    </a>` : ''}
                 </div>`;
 
             document.getElementById('sidebar-menu').innerHTML = apiMenuHtml + reportMenuHtml;
@@ -188,46 +191,63 @@
             document.getElementById('menu-10.01')?.classList.add('active-menu');
             currentMenuId = '10.01';
 
-            // Hiện skeleton ngay lập tức
-            document.getElementById('main-content').innerHTML = `
-                <div class="bg-white p-6 rounded-2xl shadow-sm border mb-6 animate-pulse">
-                    <div class="flex gap-4"><div class="flex-1 h-10 bg-slate-100 rounded-xl"></div><div class="w-32 h-10 bg-slate-100 rounded-xl"></div><div class="w-32 h-10 bg-blue-100 rounded-xl"></div></div>
-                </div>
-                <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
-                    ${[1,2,3,4,5].map(() => `<div class="flex gap-4 p-5 border-b animate-pulse">
-                        <div class="w-20 h-4 bg-slate-100 rounded"></div>
-                        <div class="flex-1 space-y-2"><div class="h-4 bg-slate-100 rounded w-3/4"></div><div class="h-3 bg-slate-50 rounded w-1/3"></div></div>
-                        <div class="w-20 h-4 bg-slate-100 rounded"></div>
-                        <div class="w-24 h-4 bg-slate-100 rounded"></div>
-                        <div class="w-16 h-6 bg-slate-100 rounded-full"></div>
-                        <div class="w-20 h-6 bg-blue-50 rounded"></div>
-                    </div>`).join('')}
-                </div>`;
-
-            // Lấy master data từ cache trước nếu có
+            // Load cache ngay lập tức
+            const cacheKeyMD = 'arito_master_data_' + SESSION.unit.unit_id;
+            const cacheKeyTasks = 'arito_tasks_' + SESSION.unit.unit_id;
+            let hasCachedTasks = false;
             try {
-                const cached = localStorage.getItem('arito_master_data_' + SESSION.unit.unit_id);
-                if (cached) MASTER_DATA = JSON.parse(cached);
+                const cachedMD = localStorage.getItem(cacheKeyMD);
+                if (cachedMD) MASTER_DATA = JSON.parse(cachedMD);
+                const cachedTasks = localStorage.getItem(cacheKeyTasks);
+                if (cachedTasks) {
+                    ALL_TASKS = JSON.parse(cachedTasks);
+                    hasCachedTasks = true;
+                }
             } catch(e) {}
 
-            // Fetch song song cả 2 API
-            try {
-                const [mdRes, taskRes] = await Promise.all([
-                    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getInitialData' }) }),
-                    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getTasks', data: { unit_id: SESSION.unit.unit_id } }) })
-                ]);
-                const [md, taskResult] = await Promise.all([mdRes.json(), taskRes.json()]);
-                MASTER_DATA = md;
-                ALL_TASKS = taskResult.data || [];
+            // Nếu có cache tasks -> render ngay, không cần chờ API
+            if (hasCachedTasks) {
                 TASKS_DIRTY = false;
-                // Cập nhật cache
-                try { localStorage.setItem('arito_master_data_' + SESSION.unit.unit_id, JSON.stringify(md)); } catch(e) {}
+                renderTable1001();
                 checkAndNotifyDeadline();
-            } catch(e) {
-                console.error('Lỗi tải dữ liệu:', e);
+            } else {
+                // Chưa có cache -> hiện skeleton
+                document.getElementById('main-content').innerHTML = `
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border mb-6 animate-pulse">
+                        <div class="flex gap-4"><div class="flex-1 h-10 bg-slate-100 rounded-xl"></div><div class="w-32 h-10 bg-slate-100 rounded-xl"></div><div class="w-32 h-10 bg-blue-100 rounded-xl"></div></div>
+                    </div>
+                    <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                        ${[1,2,3,4,5].map(() => `<div class="flex gap-4 p-5 border-b animate-pulse">
+                            <div class="w-20 h-4 bg-slate-100 rounded"></div>
+                            <div class="flex-1 space-y-2"><div class="h-4 bg-slate-100 rounded w-3/4"></div><div class="h-3 bg-slate-50 rounded w-1/3"></div></div>
+                            <div class="w-20 h-4 bg-slate-100 rounded"></div>
+                            <div class="w-24 h-4 bg-slate-100 rounded"></div>
+                            <div class="w-16 h-6 bg-slate-100 rounded-full"></div>
+                            <div class="w-20 h-6 bg-blue-50 rounded"></div>
+                        </div>`).join('')}
+                    </div>`;
             }
 
-            renderTable1001();
+            // Fetch 2 API độc lập, cái nào xong trước thì cập nhật trước
+            fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getInitialData' }) })
+                .then(r => r.json())
+                .then(md => {
+                    MASTER_DATA = md;
+                    try { localStorage.setItem(cacheKeyMD, JSON.stringify(md)); } catch(e) {}
+                })
+                .catch(e => console.error('Lỗi getInitialData:', e));
+
+            fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getTasks', data: { unit_id: SESSION.unit.unit_id } }) })
+                .then(r => r.json())
+                .then(taskResult => {
+                    ALL_TASKS = taskResult.data || [];
+                    TASKS_DIRTY = false;
+                    try { localStorage.setItem(cacheKeyTasks, JSON.stringify(ALL_TASKS)); } catch(e) {}
+                    // Re-render chỉ nếu đang ở trang 10.01
+                    if (currentMenuId === '10.01') renderTable1001();
+                    checkAndNotifyDeadline();
+                })
+                .catch(e => console.error('Lỗi getTasks:', e));
         }
 
         async function switchMenu(menuId, text) {
@@ -338,7 +358,7 @@
                     </td>
                     <td class="p-5 text-right space-x-1" onclick="event.stopPropagation()">
                         ${t.status == 0 ? `<button onclick="doQuickStart('${t.id}')" class="bg-blue-500 text-white px-3 py-1 rounded-lg text-[10px] font-black shadow-lg">BẮT ĐẦU</button>` : ''}
-                        ${t.status != 5 ? `<button onclick="doQuickDone('${t.id}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black shadow-lg">XONG</button>` : '✅'}
+                        ${t.status == 3 ? `<button onclick="doQuickDone('${t.id}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black shadow-lg">XONG</button>` : (t.status == 5 ? '✅' : '')}
                     </td>
                 </tr>
             `).join('');
@@ -696,7 +716,7 @@
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Người thực hiện</label><select name="user_id" id="task_user_id" onchange="onTaskUserChange()" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${t?.user_id == u.user_id ? 'selected' : (isEdit ? '' : (SESSION.user.user_id == u.user_id ? 'selected' : ''))}>${u.username}</option>`).join('')}</select></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Ngày bắt đầu</label><input type="text" name="start_date" class="date-mask w-full p-3 border-2 rounded-xl" placeholder="DD/MM/YYYY" maxlength="10" value="${formatDate(t?.start_date || new Date().toISOString())}"></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Ngày đến hạn *</label><input type="text" name="due_date" required class="date-mask w-full p-3 border-2 rounded-xl" placeholder="DD/MM/YYYY" maxlength="10" value="${t?.due_date ? formatDate(t.due_date) : ''}"></div>
-                            <div><label class="text-[10px] font-black uppercase text-slate-400">Ưu tiên</label><select name="priority" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.priorities.map(p => `<option value="${p.priority_code}" ${t?.priority == p.priority_code ? 'selected' : ''}>${p.priority_name}</option>`).join('')}</select></div>
+                            <div><label class="text-[10px] font-black uppercase text-slate-400">Ưu tiên</label><select name="priority" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.priorities.map(p => `<option value="${p.priority_code}" ${t ? (t.priority == p.priority_code ? 'selected' : '') : (String(p.priority_code).toLowerCase() === 'medium' || String(p.priority_name).toLowerCase().includes('medium') || String(p.priority_name).toLowerCase().includes('trung bình') ? 'selected' : '')}>${p.priority_name}</option>`).join('')}</select></div>
                             <div><label class="text-[10px] font-black uppercase text-slate-400">Trạng thái</label><select name="status" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.statuses.map(s => `<option value="${s.status_code}" ${t?.status == s.status_code ? 'selected' : ''}>${s.status_name}</option>`).join('')}</select></div>
                             <div class="col-span-2 relative" id="noti_user_wrapper">
                                 <label class="text-[10px] font-black uppercase text-slate-400">Người nhận thông báo</label>
@@ -785,6 +805,7 @@
                     ALL_TASKS.push(data);
                 }
                 closeModal('task-modal');
+                syncTasksCache();
                 if (currentMenuId === '10.01') renderTable1001();
                 else if (currentMenuId === '10.02') renderCalendar();
                 // Gửi API ngầm — apiPayload.id rỗng với task mới => Apps Script tạo mới đúng
@@ -796,6 +817,10 @@
                     })
                     .catch(err => { TASKS_DIRTY = true; console.error('saveTask error:', err); });
             };
+        }
+
+        function syncTasksCache() {
+            try { localStorage.setItem('arito_tasks_' + SESSION.unit.unit_id, JSON.stringify(ALL_TASKS)); } catch(e) {}
         }
 
         function doQuickSearch() {
@@ -812,6 +837,7 @@
                 // Xóa khỏi UI ngay lập tức
                 ALL_TASKS = ALL_TASKS.filter(t => t.id != id);
                 closeModal('task-modal');
+                syncTasksCache();
                 renderTable1001();
                 // Gửi API ngầm
                 fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteTask', data: { id } }) })
@@ -844,6 +870,7 @@
                     task.act_start_date = actStart;
                 }
                 renderTable1001();
+                syncTasksCache();
                 fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: { id, status: 3, act_start_date: actStart } }) })
                     .then(() => { TASKS_DIRTY = true; })
                     .catch(() => { TASKS_DIRTY = true; });
@@ -879,6 +906,7 @@
                     }
                 }
                 renderTable1001();
+                syncTasksCache();
                 // Gửi API ngầm
                 const payload = { id, status: 5, finish_date: finishIso };
                 if (duration !== null) payload.duration = duration;
@@ -1364,7 +1392,12 @@
             const to   = document.getElementById('rpt0502_to').value;
             document.getElementById('rpt0502_table_area').innerHTML = buildReport100502Table(from, to);
         }
-        function logout() { localStorage.removeItem('arito_qlcv_session'); location.reload(); }
+        function logout() {
+            const uid = SESSION?.unit?.unit_id;
+            localStorage.removeItem('arito_qlcv_session');
+            if (uid) localStorage.removeItem('arito_tasks_' + uid);
+            location.reload();
+        }
 
         // Khôi phục session khi F5 / mở lại tab
         (function restoreSession() {
