@@ -121,6 +121,8 @@
         let confirmCallback = null;
         let TASKS_DIRTY = true;
         let currentMenuId = null;
+        // Lưu trạng thái bộ lọc đang áp dụng ở màn hình 10.01
+        let ACTIVE_FILTER_1001 = null; // null = chưa lọc, object = đang lọc
 
         function showConfirm(title, msg, callback) {
             document.getElementById('confirm-title').innerText = title;
@@ -313,6 +315,7 @@
 
         // --- 10.01 TỔNG HỢP CÔNG VIỆC ---
         function renderTable1001() {
+            ACTIVE_FILTER_1001 = null; // reset filter state khi render lại toàn bộ trang
             const container = document.getElementById('main-content');
             const filtered = ALL_TASKS.filter(t => t.user_id == SESSION.user.user_id && (t.status == 0 || t.status == 3));
 
@@ -409,30 +412,10 @@
                 const projectCode = document.getElementById('adv_project').value;
                 const userId = document.getElementById('adv_user').value;
 
-                const filtered = ALL_TASKS.filter(t => {
-                    const matchStatus = stList.length === 0 || stList.includes(String(t.status));
-                    const matchProject = !projectCode || t.project_code === projectCode;
-                    const matchUser = !userId || String(t.user_id) === String(userId);
+                // Lưu lại trạng thái bộ lọc để giữ sau khi sửa/lưu task
+                ACTIVE_FILTER_1001 = { stList, cStart, cEnd, dStart, dEnd, projectCode, userId };
 
-                    let matchC = true;
-                    if (t.datetime0 && (cStart || cEnd)) {
-                        const dateC = parseLocalDate(t.datetime0);
-                        if (dateC) {
-                            if (cStart) { const ds = parseLocalDate(cStart); if (ds && dateC < ds) matchC = false; }
-                            if (cEnd)   { const de = parseLocalDate(cEnd);   if (de && dateC > de) matchC = false; }
-                        }
-                    }
-
-                    let matchD = true;
-                    if (t.due_date && (dStart || dEnd)) {
-                        const dateD = parseLocalDate(t.due_date);
-                        if (dateD) {
-                            if (dStart) { const ds = parseLocalDate(dStart); if (ds && dateD < ds) matchD = false; }
-                            if (dEnd)   { const de = parseLocalDate(dEnd);   if (de && dateD > de) matchD = false; }
-                        }
-                    }
-                    return matchStatus && matchProject && matchUser && matchC && matchD;
-                });
+                const filtered = _applyFilter1001(ACTIVE_FILTER_1001);
 
                 const tbody = document.getElementById('task-table-body');
                 if (!tbody) { console.error('task-table-body not found'); return; }
@@ -461,6 +444,55 @@
             } catch(err) {
                 console.error('applyTaskFilter error:', err);
                 alert('Lỗi bộ lọc: ' + err.message);
+            }
+        }
+
+        // Hàm lọc thuần tuý (tách riêng để dùng lại)
+        function _applyFilter1001(f) {
+            return ALL_TASKS.filter(t => {
+                const matchStatus = f.stList.length === 0 || f.stList.includes(String(t.status));
+                const matchProject = !f.projectCode || t.project_code === f.projectCode;
+                const matchUser = !f.userId || String(t.user_id) === String(f.userId);
+
+                let matchC = true;
+                if (t.datetime0 && (f.cStart || f.cEnd)) {
+                    const dateC = parseLocalDate(t.datetime0);
+                    if (dateC) {
+                        if (f.cStart) { const ds = parseLocalDate(f.cStart); if (ds && dateC < ds) matchC = false; }
+                        if (f.cEnd)   { const de = parseLocalDate(f.cEnd);   if (de && dateC > de) matchC = false; }
+                    }
+                }
+
+                let matchD = true;
+                if (t.due_date && (f.dStart || f.dEnd)) {
+                    const dateD = parseLocalDate(t.due_date);
+                    if (dateD) {
+                        if (f.dStart) { const ds = parseLocalDate(f.dStart); if (ds && dateD < ds) matchD = false; }
+                        if (f.dEnd)   { const de = parseLocalDate(f.dEnd);   if (de && dateD > de) matchD = false; }
+                    }
+                }
+                return matchStatus && matchProject && matchUser && matchC && matchD;
+            });
+        }
+
+        // Refresh chỉ tbody, giữ nguyên bộ lọc đang áp dụng
+        function refreshTable1001() {
+            const tbody = document.getElementById('task-table-body');
+            if (!tbody) {
+                // Trang chưa render, render lại toàn bộ
+                renderTable1001();
+                return;
+            }
+            if (ACTIVE_FILTER_1001) {
+                // Đang có bộ lọc -> tái áp dụng
+                const filtered = _applyFilter1001(ACTIVE_FILTER_1001);
+                tbody.innerHTML = filtered.length > 0
+                    ? renderTaskRows(filtered)
+                    : '<tr><td colspan="6" class="p-8 text-center text-slate-400 text-sm font-bold">Không tìm thấy công việc nào phù hợp với bộ lọc</td></tr>';
+            } else {
+                // Không có bộ lọc -> hiện mặc định
+                const defaultFiltered = ALL_TASKS.filter(t => t.user_id == SESSION.user.user_id && (t.status == 0 || t.status == 3));
+                tbody.innerHTML = renderTaskRows(defaultFiltered);
             }
         }
 
@@ -983,7 +1015,7 @@
                 }
                 closeModal('task-modal');
                 syncTasksCache();
-                if (currentMenuId === '10.01') renderTable1001();
+                if (currentMenuId === '10.01') refreshTable1001();
                 else if (currentMenuId === '10.02') renderCalendar();
                 // Gửi API ngầm — apiPayload.id rỗng với task mới => Apps Script tạo mới đúng
                 fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: apiPayload }) })
@@ -1015,7 +1047,7 @@
                 ALL_TASKS = ALL_TASKS.filter(t => t.id != id);
                 closeModal('task-modal');
                 syncTasksCache();
-                renderTable1001();
+                refreshTable1001();
                 // Gửi API ngầm
                 fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteTask', data: { id } }) })
                     .then(r => r.json())
@@ -1046,7 +1078,7 @@
                     task.status = 3;
                     task.act_start_date = actStart;
                 }
-                renderTable1001();
+                refreshTable1001();
                 syncTasksCache();
                 fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: { id, status: 3, act_start_date: actStart } }) })
                     .then(() => { TASKS_DIRTY = true; })
@@ -1082,7 +1114,7 @@
                         }
                     }
                 }
-                renderTable1001();
+                refreshTable1001();
                 syncTasksCache();
                 // Gửi API ngầm
                 const payload = { id, status: 5, finish_date: finishIso };
@@ -1140,9 +1172,25 @@
         // Parse datetime0 format: "DD/MM/YYYY H:MM:SS" -> Date object
         function parseDatetime0(str) {
             if (!str) return null;
-            // Thử ISO trước (fallback)
-            if (str.includes('T')) return new Date(str);
-            // Format: DD/MM/YYYY H:MM:SS
+            // Dạng ISO có chữ T: đọc thẳng ngày+giờ từ chuỗi, KHÔNG qua new Date()
+            // để tránh lệch giờ do timezone máy khách khác nhau.
+            if (str.includes('T')) {
+                // UTC string (kết thúc Z): cộng +7h để ra giờ VN
+                if (str.endsWith('Z') || (!str.includes('+') && str.lastIndexOf('-') <= 7)) {
+                    const ms = Date.parse(str);
+                    if (!isNaN(ms)) {
+                        const vn = new Date(ms + 7 * 3600000);
+                        return new Date(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate(),
+                                        vn.getUTCHours(), vn.getUTCMinutes(), vn.getUTCSeconds());
+                    }
+                }
+                // Có timezone offset (+07:00): parse phần trước T và phần giờ
+                const [datePart, timePart] = str.split('T');
+                const [y, m, d] = datePart.split('-').map(Number);
+                const [hh, mm, ss] = (timePart || '').split(':').map(v => parseInt(v) || 0);
+                return new Date(y, m - 1, d, hh, mm, ss);
+            }
+            // Format: DD/MM/YYYY H:MM:SS (chuỗi tự tạo trong app, không có timezone)
             const parts = str.trim().split(' ');
             if (parts.length < 2) return null;
             const [d, m, y] = parts[0].split('/').map(Number);
@@ -1153,20 +1201,31 @@
 
         function parseLocalDate(str) {
             if (!str) return null;
-            // Support DD/MM/YYYY format from text inputs
+            // Dạng DD/MM/YYYY (từ input người dùng nhập)
             if (str.includes('/')) {
                 const [d, m, y] = str.split('/').map(Number);
                 if (!d || !m || !y || y < 1000) return null;
                 return new Date(y, m - 1, d);
             }
-            // Nếu chuỗi có timezone (kết thúc Z hoặc có +/-HH:MM),
-            // convert sang local time trước khi lấy ngày, tránh lệch múi giờ UTC
-            if (str.includes('T') && (str.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(str))) {
-                const localDate = new Date(str);
-                return new Date(localDate.getFullYear(), localDate.getMonth(), localDate.getDate());
+            // Dạng ISO có chữ T: đọc thẳng phần YYYY-MM-DD từ chuỗi,
+            // KHÔNG qua new Date() để tránh lệch ngày do timezone máy khách.
+            // VD: "2026-05-07T17:00:00.000Z" (UTC) = ngày 08/05 VN (UTC+7)
+            if (str.includes('T')) {
+                // UTC string (kết thúc Z, hoặc không có dấu + sau vị trí 10): cộng +7h rồi lấy ngày
+                if (str.endsWith('Z') || (!str.includes('+') && str.lastIndexOf('-') <= 7)) {
+                    const ms = Date.parse(str);
+                    if (!isNaN(ms)) {
+                        const vn = new Date(ms + 7 * 3600000);
+                        return new Date(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate());
+                    }
+                }
+                // Đã có timezone offset (+07:00): lấy phần date trước T
+                const datePart = str.split('T')[0];
+                const [y, m, d] = datePart.split('-').map(Number);
+                return new Date(y, m - 1, d);
             }
-            // Format YYYY-MM-DD hoặc YYYY-MM-DDTHH:MM:SS (không có timezone) -> parse trực tiếp
-            const [y, m, d] = str.split('T')[0].split('-').map(Number);
+            // Dạng YYYY-MM-DD thuần
+            const [y, m, d] = str.split('-').map(Number);
             return new Date(y, m - 1, d);
         }
         function applyDateMask(input) {
@@ -1781,10 +1840,21 @@
 
         function formatOutofficeTime(t) {
             if (!t) return '';
+            // Nếu là ISO string (có chữ T), đọc thẳng phần giờ:phút từ string
+            // KHÔNG dùng new Date().getHours() để tránh lệch timezone trên các máy khác nhau
             if (typeof t === 'string' && t.includes('T')) {
-                const dt = new Date(t);
-                return `${dt.getHours().toString().padStart(2,'0')}:${dt.getMinutes().toString().padStart(2,'0')}`;
+                // Dạng: "2026-05-08T08:00:00.000Z" hoặc "2026-05-08T08:00:00+07:00"
+                const timePart = t.split('T')[1]; // "08:00:00.000Z" hoặc "08:00:00+07:00"
+                if (timePart) {
+                    const hhmm = timePart.substring(0, 5); // "08:00"
+                    return hhmm;
+                }
             }
+            // Nếu là chuỗi HH:MM hoặc HH:MM:SS thuần
+            if (typeof t === 'string' && !t.includes('T')) {
+                return t.substring(0, 5);
+            }
+            // Nếu là Date object (không khuyến khích, nhưng vẫn xử lý)
             if (t instanceof Date) {
                 return `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
             }
@@ -2309,6 +2379,7 @@
 
         // Gắn tất cả function vào window để inline onclick trong innerHTML luôn tìm thấy
         window.applyTaskFilter = applyTaskFilter;
+        window.refreshTable1001 = refreshTable1001;
         window.applyCalFilter = applyCalFilter;
         window.toggleAdvance = toggleAdvance;
         window.openTaskForm = openTaskForm;
