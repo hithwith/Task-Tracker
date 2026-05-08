@@ -160,32 +160,66 @@
         }
 
         async function initApp() {
+            console.log('initApp - SESSION.menus:', JSON.stringify(SESSION.menus));
+            console.log('initApp - sidebarEl sau render:', document.getElementById('sidebar-menu')?.innerHTML?.substring(0, 500));
             document.getElementById('login-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
             document.getElementById('user-display').innerText = SESSION.user.fullname;
 
             const isAdmin = SESSION.user.admin == 1 || SESSION.user.admin === true || SESSION.user.admin === '1';
 
-            const apiMenuHtml = (SESSION.menus || [])
-                .filter(m => m.menu_id !== '10.05.01' && m.menu_id !== '10.05.02')
+            // Build sidebar menu bằng DOM API - tránh lỗi encoding/template literal
+            const sidebarEl = document.getElementById('sidebar-menu');
+            sidebarEl.innerHTML = '';
+
+            // 1. Menu từ API (lọc bỏ các menu cố định)
+            const excludedIds = ['10.05', '10.05.01', '10.05.02', '10.06'];
+            (SESSION.menus || [])
+                .filter(m => !excludedIds.includes(m.menu_id))
                 .filter(m => m.menu_id !== '10.04' || isAdmin)
-                .map(m => `<a href="javascript:void(0)" onclick="switchMenu('${m.menu_id}', '${m.text}')"
-                   id="menu-${m.menu_id}" class="sidebar-item flex items-center p-4 rounded-xl text-sm font-bold transition">${m.text}</a>`).join('');
+                .forEach(m => {
+                    const a = document.createElement('a');
+                    a.href = 'javascript:void(0)';
+                    a.id = 'menu-' + m.menu_id;
+                    a.className = 'sidebar-item flex items-center p-4 rounded-xl text-sm font-bold transition';
+                    a.textContent = m.text;
+                    a.onclick = () => switchMenu(m.menu_id, m.text);
+                    sidebarEl.appendChild(a);
+                });
 
-            const reportMenuHtml = `
-                <div class="mt-3 pt-3 border-t border-slate-700">
-                    <div class="px-4 pb-1 text-[10px] font-black text-slate-500 uppercase tracking-widest">&#128202; Báo cáo</div>
-                    <a href="javascript:void(0)" onclick="switchMenu('10.05.01','Thống kê thời gian làm việc cá nhân')"
-                       id="menu-10.05.01" class="sidebar-item flex items-center pl-6 pr-4 py-3 rounded-xl text-xs font-bold transition">
-                       &#128197; Thống kê thời gian cá nhân
-                    </a>
-                    ${isAdmin ? `<a href="javascript:void(0)" onclick="switchMenu('10.05.02','Báo cáo tổng tình hình làm việc phòng')"
-                       id="menu-10.05.02" class="sidebar-item flex items-center pl-6 pr-4 py-3 rounded-xl text-xs font-bold transition">
-                       &#128200; Thống kê thời gian làm việc phòng
-                    </a>` : ''}
-                </div>`;
+            // 2. Menu 10.06 - Vắng mặt / Ra ngoài (cố định, luôn hiện)
+            const a1006 = document.createElement('a');
+            a1006.href = 'javascript:void(0)';
+            a1006.id = 'menu-10.06';
+            a1006.className = 'sidebar-item flex items-center p-4 rounded-xl text-sm font-bold transition';
+            a1006.textContent = '🚪 Vắng mặt / Ra ngoài';
+            a1006.onclick = () => switchMenu('10.06', 'Vắng mặt / Ra ngoài');
+            sidebarEl.appendChild(a1006);
 
-            document.getElementById('sidebar-menu').innerHTML = apiMenuHtml + reportMenuHtml;
+            // 3. Nhóm Báo cáo
+            const reportGroup = document.createElement('div');
+            reportGroup.className = 'mt-3 pt-3 border-t border-slate-700';
+            reportGroup.innerHTML = '<div class="px-4 pb-1 text-[10px] font-black text-slate-500 uppercase tracking-widest">📊 Báo cáo</div>';
+
+            const a1 = document.createElement('a');
+            a1.href = 'javascript:void(0)';
+            a1.id = 'menu-10.05.01';
+            a1.className = 'sidebar-item flex items-center pl-6 pr-4 py-3 rounded-xl text-xs font-bold transition';
+            a1.textContent = '📅 Thống kê thời gian cá nhân';
+            a1.onclick = () => switchMenu('10.05.01', 'Thống kê thời gian làm việc cá nhân');
+            reportGroup.appendChild(a1);
+
+            if (isAdmin) {
+                const a2 = document.createElement('a');
+                a2.href = 'javascript:void(0)';
+                a2.id = 'menu-10.05.02';
+                a2.className = 'sidebar-item flex items-center pl-6 pr-4 py-3 rounded-xl text-xs font-bold transition';
+                a2.textContent = '📈 Thống kê thời gian làm việc phòng';
+                a2.onclick = () => switchMenu('10.05.02', 'Báo cáo tổng tình hình làm việc phòng');
+                reportGroup.appendChild(a2);
+            }
+            sidebarEl.appendChild(reportGroup);
+            console.log('sidebar HTML sau khi build:', sidebarEl.innerHTML.substring(0, 800));
             document.getElementById('page-title').innerText = 'Tổng hợp công việc';
             document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active-menu'));
             document.getElementById('menu-10.01')?.classList.add('active-menu');
@@ -274,6 +308,7 @@
             else if (menuId === '10.04') renderProjectList();
             else if (menuId === '10.05.01') renderReport100501();
             else if (menuId === '10.05.02') renderReport100502();
+            else if (menuId === '10.06') await renderOutoffice();
         }
 
         // --- 10.01 TỔNG HỢP CÔNG VIỆC ---
@@ -427,7 +462,7 @@
 
                     <div class="grid grid-cols-7 gap-px bg-slate-200 border rounded-xl overflow-hidden shadow-inner">
                         ${['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(d => `<div class="bg-slate-50 p-3 text-center font-black text-[10px] text-slate-400">${d}</div>`).join('')}
-                        ${Array(firstDay).fill('').map(() => `<div class="bg-slate-50 p-2 h-32"></div>`).join('')}
+                        ${Array(firstDay).fill('').map(() => `<div class="bg-slate-50 p-2 min-h-[8rem]"></div>`).join('')}
                         ${Array.from({length: daysInMonth}, (_, i) => {
                             const d = i + 1;
                             const dStr = `${year}-${(month+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
@@ -435,14 +470,14 @@
                             const todayMid = new Date(); todayMid.setHours(0,0,0,0);
                             const isOverdueCell = cellDate < todayMid;
                             const dayTasks = tasksToDisplay.filter(t => t.due_date && t.due_date.startsWith(dStr));
-                            return `<div class="bg-white p-2 h-32 border-t hover:bg-blue-50/50 cursor-pointer overflow-y-auto">
+                            return `<div class="bg-white p-2 min-h-[8rem] border-t hover:bg-blue-50/50 cursor-pointer">
                                 <div class="text-xs font-black mb-1 ${(d == new Date().getDate() && month == new Date().getMonth() && year == new Date().getFullYear()) ? 'text-blue-600 bg-blue-50 w-6 h-6 flex items-center justify-center rounded-full' : ''}">${d}</div>
                                 ${dayTasks.map(t => {
                                     const isOverdue = isOverdueCell && t.status != 5;
                                     const chipCls = isOverdue
                                         ? 'bg-rose-100 text-rose-700 border border-rose-300'
                                         : 'bg-blue-100 text-blue-700';
-                                    return `<div class="text-[8px] ${chipCls} p-1 mb-0.5 rounded-md font-bold truncate" onclick="openTaskForm(${JSON.stringify(t).replace(/"/g,'&quot;')})">(${t.project_code}) ${t.task_name}</div>`;
+                                    return `<div class="text-[8px] ${chipCls} p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal" onclick="openTaskForm(${JSON.stringify(t).replace(/"/g,'&quot;')})">(${t.project_code}) ${t.task_name}</div>`;
                                 }).join('')}
                             </div>`;
                         }).join('')}
@@ -1212,7 +1247,7 @@
                     </div>
                     <div class="grid grid-cols-7 gap-px bg-slate-200 border rounded-xl overflow-hidden shadow-inner">
                         ${['CN','T2','T3','T4','T5','T6','T7'].map(d => '<div class="bg-slate-50 p-3 text-center font-black text-[10px] text-slate-400">'+d+'</div>').join('')}
-                        ${Array(firstDay).fill('').map(() => '<div class="bg-slate-50 p-2 min-h-[120px]"></div>').join('')}
+                        ${Array(firstDay).fill('').map(() => '<div class="bg-slate-50 p-2 min-h-[8rem]"></div>').join('')}
                         ${Array.from({length: daysInMonth}, (_, i) => {
                             const d = i + 1;
                             const today2 = new Date();
@@ -1223,19 +1258,19 @@
                             const hasTasks = dayTasks.length > 0;
                             const doingTasks = dayTasks.filter(t => t.status == 3);
                             const doneTasks  = dayTasks.filter(t => t.status == 5);
-                            return '<div class="bg-white p-2 min-h-[120px] border-t hover:bg-blue-50/30 overflow-y-auto">'
+                            return '<div class="bg-white p-2 min-h-[8rem] border-t hover:bg-blue-50/30">'
                                 + '<div class="flex justify-between items-start mb-1">'
                                 + '<span class="text-xs font-black ' + (isToday ? 'text-blue-600 bg-blue-50 w-6 h-6 flex items-center justify-center rounded-full' : 'text-slate-500') + '">' + d + '</span>'
                                 + (hasTasks ? '<span class="text-[9px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full">' + totalHours + 'h</span>' : '')
                                 + '</div>'
                                 + doingTasks.map(t => {
                                     const hrs = t.act_time ? (parseFloat(t.act_time)/3600).toFixed(2) : null;
-                                    return '<div class="text-[8px] bg-blue-100 text-blue-700 p-1 mb-0.5 rounded-md font-bold truncate" title="' + t.task_name + ' – ' + getUserName(t.user_id) + '">'
+                                    return '<div class="text-[8px] bg-blue-100 text-blue-700 p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal" title="' + t.task_name + ' – ' + getUserName(t.user_id) + '">'
                                         + '\uD83D\uDD04 ' + t.task_name + (hrs ? ' (' + hrs + 'h)' : '') + '<span class="ml-1 opacity-60">@' + getUserName(t.user_id) + '</span></div>';
                                 }).join('')
                                 + doneTasks.map(t => {
                                     const hrs = t.act_time ? (parseFloat(t.act_time)/3600).toFixed(2) : null;
-                                    return '<div class="text-[8px] bg-emerald-100 text-emerald-700 p-1 mb-0.5 rounded-md font-bold truncate" title="' + t.task_name + ' – ' + getUserName(t.user_id) + '">'
+                                    return '<div class="text-[8px] bg-emerald-100 text-emerald-700 p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal" title="' + t.task_name + ' – ' + getUserName(t.user_id) + '">'
                                         + '\u2705 ' + t.task_name + (hrs ? ' (' + hrs + 'h)' : '') + '<span class="ml-1 opacity-60">@' + getUserName(t.user_id) + '</span></div>';
                                 }).join('')
                                 + '</div>';
@@ -1392,6 +1427,405 @@
             const to   = document.getElementById('rpt0502_to').value;
             document.getElementById('rpt0502_table_area').innerHTML = buildReport100502Table(from, to);
         }
+        // =============================================
+        // 10.06 - VẮNG MẶT / RA NGOÀI
+        // =============================================
+        let ALL_OUTOFFICE = [];
+        let OUTOFFICE_DIRTY = true;
+        let currentOutofficeDate = new Date();
+
+        // Queue để tránh concurrent write conflicts
+        let _outofficeWriteQueue = Promise.resolve();
+        function queueOutofficeWrite(fn) {
+            _outofficeWriteQueue = _outofficeWriteQueue.then(fn).catch(console.error);
+            return _outofficeWriteQueue;
+        }
+
+        // Retry fetch với exponential backoff
+        async function fetchWithRetry(url, options, retries = 3) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const res = await fetch(url, options);
+                    const result = await res.json();
+                    return result;
+                } catch(e) {
+                    if (i === retries - 1) throw e;
+                    await new Promise(r => setTimeout(r, 300 * Math.pow(2, i)));
+                }
+            }
+        }
+
+        async function loadOutoffice(force = false) {
+            if (!force && !OUTOFFICE_DIRTY) return;
+            try {
+                const result = await fetchWithRetry(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: 'getOutOffice', data: { filters: { unit_id: SESSION.unit.unit_id } } })
+                });
+                ALL_OUTOFFICE = result.data || [];
+                OUTOFFICE_DIRTY = false;
+            } catch(e) {
+                console.error('Lỗi tải outoffice:', e);
+            }
+        }
+
+        async function renderOutoffice() {
+            const container = document.getElementById('main-content');
+            container.innerHTML = `<div class="flex justify-center mt-20"><div class="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent"></div></div>`;
+            await loadOutoffice();
+            renderOutofficeCalendar();
+        }
+
+        function renderOutofficeCalendar() {
+            const container = document.getElementById('main-content');
+            const year = currentOutofficeDate.getFullYear();
+            const month = currentOutofficeDate.getMonth();
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            // Group outoffice records by date (dùng parseOutofficeDateVN để đúng múi giờ VN)
+            const byDate = {};
+            ALL_OUTOFFICE.forEach(rec => {
+                if (!rec.date) return;
+                const dateKey = parseOutofficeDateVN(rec.date);
+                if (!dateKey) return;
+                if (!byDate[dateKey]) byDate[dateKey] = [];
+                byDate[dateKey].push(rec);
+            });
+
+            // Collect all users with outoffice this month
+            const monthPrefix = `${year}-${(month+1).toString().padStart(2,'0')}`;
+            const allMonthRecs = ALL_OUTOFFICE.filter(rec => {
+                if (!rec.date) return false;
+                const dk = parseOutofficeDateVN(rec.date);
+                return dk ? dk.startsWith(monthPrefix) : false;
+            });
+
+            // User list for bottom table
+            const userMonthMap = {};
+            allMonthRecs.forEach(rec => {
+                const uid = rec.user_id;
+                if (!userMonthMap[uid]) userMonthMap[uid] = [];
+                userMonthMap[uid].push(rec);
+            });
+
+            container.innerHTML = `
+                <div class="space-y-4">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border">
+                        <div class="flex justify-between items-center mb-6">
+                            <div class="flex gap-2 items-center">
+                                <button onclick="changeOutofficeMonth(-1)" class="w-10 h-10 bg-gray-50 rounded-xl border flex items-center justify-center font-bold">◀</button>
+                                <h3 class="text-2xl font-black text-slate-800 px-4">THÁNG ${(month+1)} / ${year}</h3>
+                                <button onclick="changeOutofficeMonth(1)" class="w-10 h-10 bg-gray-50 rounded-xl border flex items-center justify-center font-bold">▶</button>
+                            </div>
+                            <button onclick="openOutofficeForm()" class="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:shadow-blue-200">+ Thêm lịch</button>
+                        </div>
+
+                        <div class="grid grid-cols-7 gap-px bg-slate-200 border rounded-xl overflow-hidden shadow-inner">
+                            ${['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(d => `<div class="bg-slate-50 p-3 text-center font-black text-[10px] text-slate-400">${d}</div>`).join('')}
+                            ${Array(firstDay).fill('').map(() => `<div class="bg-slate-50 p-2 min-h-[8rem]"></div>`).join('')}
+                            ${Array.from({length: daysInMonth}, (_, i) => {
+                                const d = i + 1;
+                                const dStr = `${year}-${(month+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+                                const isToday = (d == new Date().getDate() && month == new Date().getMonth() && year == new Date().getFullYear());
+                                const dayRecs = byDate[dStr] || [];
+                                return `<div class="bg-white p-2 min-h-[8rem] border-t hover:bg-blue-50/50 cursor-pointer" onclick="openOutofficeFormWithDate('${dStr}', event)">
+                                    <div class="text-xs font-black mb-1 ${isToday ? 'text-blue-600 bg-blue-50 w-6 h-6 flex items-center justify-center rounded-full' : ''}">${d}</div>
+                                    ${dayRecs.map(rec => {
+                                        const uname = getUserName(rec.user_id);
+                                        const fh = formatOutofficeTime(rec.from_hour);
+                                        const th = formatOutofficeTime(rec.to_hour);
+                                        const timeStr = fh && th ? `${fh}-${th}` : '';
+                                        const desc = rec.descript ? ` ${rec.descript}` : '';
+                                        return `<div class="text-[8px] bg-orange-100 text-orange-700 border border-orange-200 p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal cursor-pointer"
+                                            onclick="event.stopPropagation(); openOutofficeForm(${JSON.stringify(rec).replace(/"/g,'&quot;')})"
+                                            title="${uname}: ${rec.descript || ''} ${timeStr}">
+                                            🚪 ${uname} ${timeStr}${desc}
+                                        </div>`;
+                                    }).join('')}
+                                </div>`;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    <!-- Danh sách tất cả mọi người trong tháng -->
+                    <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                        <div class="p-4 border-b bg-orange-50 flex items-center gap-2">
+                            <span class="text-lg">🚪</span>
+                            <h4 class="font-black text-orange-700 uppercase text-xs">Tất cả vắng mặt tháng ${(month+1)}/${year} (${allMonthRecs.length} lượt)</h4>
+                        </div>
+                        <div class="overflow-auto max-h-80">
+                            <table class="w-full text-left">
+                                <thead class="bg-slate-50 border-b">
+                                    <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        <th class="p-3">Nhân viên</th>
+                                        <th class="p-3 text-center">Ngày</th>
+                                        <th class="p-3 text-center">Giờ từ</th>
+                                        <th class="p-3 text-center">Giờ đến</th>
+                                        <th class="p-3">Diễn giải</th>
+                                        <th class="p-3 text-right">Thao tác</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">
+                                    ${allMonthRecs.length === 0
+                                        ? `<tr><td colspan="6" class="p-6 text-center text-slate-400 text-xs">✅ Không có vắng mặt nào trong tháng này</td></tr>`
+                                        : allMonthRecs.sort((a,b) => {
+                                            const da = normOutofficeDate(a.date), db = normOutofficeDate(b.date);
+                                            return da.localeCompare(db);
+                                        }).map(rec => `
+                                        <tr class="hover:bg-orange-50/40 cursor-pointer" onclick="openOutofficeForm(${JSON.stringify(rec).replace(/"/g,'&quot;')})">
+                                            <td class="p-3 font-bold text-slate-700 text-sm">${getUserName(rec.user_id)}</td>
+                                            <td class="p-3 text-center text-xs text-slate-600">${formatOutofficeDate(rec.date)}</td>
+                                            <td class="p-3 text-center text-xs text-slate-600">${formatOutofficeTime(rec.from_hour) || '-'}</td>
+                                            <td class="p-3 text-center text-xs text-slate-600">${formatOutofficeTime(rec.to_hour) || '-'}</td>
+                                            <td class="p-3 text-xs text-slate-500 max-w-xs truncate">${rec.descript || '-'}</td>
+                                            <td class="p-3 text-right" onclick="event.stopPropagation()">
+                                                <button onclick="doDeleteOutoffice('${rec.id}')" class="text-red-500 hover:text-red-700 font-bold text-xs px-2 py-1 rounded-lg hover:bg-red-50">Xóa</button>
+                                            </td>
+                                        </tr>`).join('')
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function formatOutofficeTime(t) {
+            if (!t) return '';
+            if (typeof t === 'string' && t.includes('T')) {
+                const dt = new Date(t);
+                return `${dt.getHours().toString().padStart(2,'0')}:${dt.getMinutes().toString().padStart(2,'0')}`;
+            }
+            if (t instanceof Date) {
+                return `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
+            }
+            return t;
+        }
+
+        // Parse ngày outoffice về YYYY-MM-DD theo giờ Việt Nam (UTC+7)
+        // Tránh lỗi lệch ngày khi API trả ISO string dạng UTC (e.g. 2025-05-07T17:00:00Z = 08/05 VN)
+        function parseOutofficeDateVN(d) {
+            if (!d) return '';
+            if (d instanceof Date) {
+                // Cộng offset +7h rồi lấy ngày
+                const vn = new Date(d.getTime() + 7 * 3600000);
+                return vn.toISOString().slice(0, 10);
+            }
+            if (typeof d === 'string') {
+                // Dạng DD/MM/YYYY
+                if (d.includes('/')) {
+                    const [dd, mm, yyyy] = d.split('/');
+                    return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`;
+                }
+                // Dạng ISO có timezone offset, e.g. 2025-05-08T00:00:00+07:00
+                if (d.includes('+') && d.includes('T')) {
+                    // Lấy phần date trước T - đây chính là ngày local
+                    return d.split('T')[0];
+                }
+                // Dạng ISO UTC, e.g. 2025-05-07T17:00:00.000Z -> cộng 7h
+                if (d.endsWith('Z') || (d.includes('T') && !d.includes('+'))) {
+                    const ms = Date.parse(d);
+                    if (!isNaN(ms)) {
+                        const vn = new Date(ms + 7 * 3600000);
+                        return vn.toISOString().slice(0, 10);
+                    }
+                }
+                // Dạng YYYY-MM-DD thuần
+                return d.split('T')[0];
+            }
+            return '';
+        }
+
+        function normOutofficeDate(d) {
+            return parseOutofficeDateVN(d);
+        }
+
+        function formatOutofficeDate(d) {
+            if (!d) return '-';
+            const ymd = parseOutofficeDateVN(d);
+            if (!ymd || ymd.length < 10) return '-';
+            const [y, m, dd] = ymd.split('-');
+            if (parseInt(y) <= 1900) return '-';
+            return `${dd}/${m}/${y}`;
+        }
+
+        function changeOutofficeMonth(s) {
+            currentOutofficeDate.setMonth(currentOutofficeDate.getMonth() + s);
+            renderOutofficeCalendar();
+        }
+
+        function openOutofficeFormWithDate(dateStr, event) {
+            // dateStr dạng YYYY-MM-DD
+            const [y, m, d] = dateStr.split('-');
+            const prefilled = { _prefillDate: `${d}/${m}/${y}` };
+            openOutofficeForm(null, prefilled);
+        }
+
+        function openOutofficeForm(rec = null, prefill = null) {
+            const isEdit = !!rec;
+            const today = new Date();
+            const defaultDate = today.getDate().toString().padStart(2,'0') + '/' + (today.getMonth()+1).toString().padStart(2,'0') + '/' + today.getFullYear();
+            const currentDateVal = isEdit ? formatOutofficeDate(rec.date) : (prefill?._prefillDate || defaultDate);
+
+            const html = `
+                <div id="outoffice-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-4">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div class="p-5 bg-slate-900 text-white font-black flex justify-between uppercase tracking-widest">
+                            <span>🚪 ${isEdit ? 'Sửa lịch vắng mặt' : 'Thêm lịch vắng mặt'}</span>
+                            <button onclick="closeModal('outoffice-modal')">&times;</button>
+                        </div>
+                        <form id="form-outoffice" class="p-6 space-y-5">
+                            <input type="hidden" name="id" value="${rec?.id || ''}">
+
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Ngày *</label>
+                                <input type="text" name="date" required class="date-mask w-full p-3 border-2 rounded-xl outline-none focus:border-blue-400 mt-1" placeholder="DD/MM/YYYY" maxlength="10" value="${currentDateVal}">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="text-[10px] font-black uppercase text-slate-400">Giờ từ *</label>
+                                    <input type="text" data-format="24h" name="from_hour" required class="w-full p-3 border-2 rounded-xl outline-none focus:border-blue-400 mt-1" placeholder="HH:MM" maxlength="5" value="${formatOutofficeTime(rec?.from_hour) || '08:00'}" oninput="maskTime(this)">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase text-slate-400">Giờ đến *</label>
+                                    <input type="text" data-format="24h" name="to_hour" required class="w-full p-3 border-2 rounded-xl outline-none focus:border-blue-400 mt-1" placeholder="HH:MM" maxlength="5" value="${formatOutofficeTime(rec?.to_hour) || '17:00'}" oninput="maskTime(this)">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Diễn giải</label>
+                                <textarea name="descript" rows="3" class="w-full p-3 border-2 rounded-xl outline-none focus:border-blue-400 mt-1 resize-none" placeholder="Nhập lý do vắng mặt / ra ngoài...">${rec?.descript || ''}</textarea>
+                            </div>
+
+                            <div class="flex justify-between items-center pt-4 border-t">
+                                ${isEdit
+                                    ? `<button type="button" onclick="doDeleteOutoffice('${rec.id}', true)" class="px-5 py-3 bg-red-100 text-red-600 rounded-xl font-bold hover:bg-red-200 transition">Xóa dòng</button>`
+                                    : '<div></div>'}
+                                <div class="flex gap-3">
+                                    <button type="button" onclick="closeModal('outoffice-modal')" class="px-6 py-3 bg-gray-100 rounded-xl font-bold">Hủy</button>
+                                    <button type="submit" id="btn-save-outoffice" class="px-8 py-3 bg-blue-600 text-white rounded-xl font-black shadow-lg shadow-blue-200">Lưu</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>`;
+
+            document.getElementById('modal-area').innerHTML = html;
+            initDateMasks();
+
+            document.getElementById('form-outoffice').onsubmit = async (e) => {
+                e.preventDefault();
+                const btn = document.getElementById('btn-save-outoffice');
+                btn.innerText = 'Đang lưu...'; btn.disabled = true;
+
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+
+                if (data.date && data.date.includes('/')) {
+                    const [d, m, y] = data.date.split('/');
+                    data.date = `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`;
+                }
+
+                data.unit_id = SESSION.unit.unit_id;
+                data.user_id = SESSION.user.user_id;
+
+                const now = new Date();
+                const nowStr = `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+
+                const isNew = !data.id;
+                if (isNew) {
+                    data.user_id0 = SESSION.user.user_id;
+                    data.datetime0 = nowStr;
+                }
+                data.user_id2 = SESSION.user.user_id;
+                data.datetime2 = nowStr;
+
+                // Optimistic update: cập nhật local cache ngay, đóng modal
+                const tempId = data.id || ('tmp_' + Date.now());
+                if (isNew) {
+                    data._tempId = tempId;
+                    ALL_OUTOFFICE.push({ ...data, id: tempId });
+                } else {
+                    const idx = ALL_OUTOFFICE.findIndex(r => String(r.id) === String(data.id));
+                    if (idx > -1) ALL_OUTOFFICE[idx] = { ...ALL_OUTOFFICE[idx], ...data };
+                }
+                closeModal('outoffice-modal');
+                renderOutofficeCalendar();
+
+                // Gọi API trong queue để tránh conflict
+                queueOutofficeWrite(async () => {
+                    try {
+                        const result = await fetchWithRetry(API_URL, {
+                            method: 'POST',
+                            body: JSON.stringify({ action: 'saveOutOffice', data })
+                        });
+                        if (result.status === 'success') {
+                            // Cập nhật id thật từ server
+                            if (isNew && result.id) {
+                                const idx = ALL_OUTOFFICE.findIndex(r => r.id === tempId || r._tempId === tempId);
+                                if (idx > -1) { ALL_OUTOFFICE[idx].id = result.id; delete ALL_OUTOFFICE[idx]._tempId; }
+                            }
+                        } else {
+                            // Rollback nếu lỗi
+                            if (isNew) ALL_OUTOFFICE = ALL_OUTOFFICE.filter(r => r._tempId !== tempId && r.id !== tempId);
+                            else OUTOFFICE_DIRTY = true;
+                            alert('Lỗi lưu: ' + (result.message || 'Không xác định'));
+                            renderOutofficeCalendar();
+                        }
+                    } catch(err) {
+                        if (isNew) ALL_OUTOFFICE = ALL_OUTOFFICE.filter(r => r._tempId !== tempId && r.id !== tempId);
+                        else OUTOFFICE_DIRTY = true;
+                        alert('Lỗi kết nối khi lưu. Vui lòng thử lại.');
+                        renderOutofficeCalendar();
+                    }
+                });
+            };
+        }
+
+        function doDeleteOutoffice(id, fromModal = false) {
+            showConfirm('Xóa vắng mặt', 'Bạn muốn xóa dòng vắng mặt này?', () => {
+                if (fromModal) closeModal('outoffice-modal');
+
+                // Optimistic: xóa khỏi cache ngay
+                const backup = ALL_OUTOFFICE.find(r => String(r.id) === String(id));
+                ALL_OUTOFFICE = ALL_OUTOFFICE.filter(r => String(r.id) !== String(id));
+                renderOutofficeCalendar();
+
+                queueOutofficeWrite(async () => {
+                    try {
+                        const result = await fetchWithRetry(API_URL, {
+                            method: 'POST',
+                            body: JSON.stringify({ action: 'deleteOutOffice', data: { id } })
+                        });
+                        if (result.status !== 'success') {
+                            // Rollback
+                            if (backup) ALL_OUTOFFICE.push(backup);
+                            alert('Lỗi xóa: ' + (result.message || 'Không xác định'));
+                            renderOutofficeCalendar();
+                        }
+                    } catch(e) {
+                        if (backup) ALL_OUTOFFICE.push(backup);
+                        alert('Lỗi kết nối khi xóa. Vui lòng thử lại.');
+                        renderOutofficeCalendar();
+                    }
+                });
+            });
+        }
+
+        function maskTime(input) {
+            let v = input.value.replace(/[^0-9]/g, '');
+            if (v.length >= 3) v = v.slice(0,2) + ':' + v.slice(2,4);
+            input.value = v;
+            // Validate range
+            if (v.length === 5) {
+                const [h, m] = v.split(':').map(Number);
+                if (h > 23) input.value = '23:' + v.slice(3);
+                if (m > 59) input.value = v.slice(0,3) + '59';
+            }
+        }
+
         function logout() {
             const uid = SESSION?.unit?.unit_id;
             localStorage.removeItem('arito_qlcv_session');
@@ -1409,7 +1843,7 @@
                         // Hiện app ngay, tránh màn trắng trong khi await initApp
                         document.getElementById('login-screen').classList.add('hidden');
                         document.getElementById('main-app').classList.remove('hidden');
-                        initApp();
+                        initApp().catch(console.error);
                         return;
                     }
                 }
