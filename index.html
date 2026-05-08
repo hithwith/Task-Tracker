@@ -27,7 +27,7 @@
 
     <script>
         // Link API của bạn
-        const API_URL = 'https://script.google.com/macros/s/AKfycbySPmJiCRiTzCTSpYkcg4WGYYggu9RcARxyt3SA-RZwMGlHeE20Ku87-LsrujyazcBhRA/exec';
+        const API_URL = 'https://script.google.com/macros/s/AKfycbwrXGZLfaEyxrLYPasVx6g1djpqrSpmrfaKPEwOsSER461N0QyGRcNZhRYM3W1zBhrrLA/exec';
     </script>
 
     <div id="login-screen" class="hidden min-h-screen flex items-center justify-center bg-slate-900">
@@ -1710,6 +1710,14 @@
                     body: JSON.stringify({ action: 'getOutOffice', data: { filters: { unit_id: SESSION.unit.unit_id } } })
                 });
                 ALL_OUTOFFICE = result.data || [];
+                if (ALL_OUTOFFICE.length > 0) {
+                    console.log('[DEBUG] full record[0]:', JSON.stringify(ALL_OUTOFFICE[0]));
+                    const r0 = ALL_OUTOFFICE[0];
+                    console.log('[DEBUG] from_hour type:', typeof r0.from_hour, '| value:', r0.from_hour);
+                    console.log('[DEBUG] to_hour   type:', typeof r0.to_hour,   '| value:', r0.to_hour);
+                    console.log('[DEBUG] formatted from_hour:', formatOutofficeTime(r0.from_hour));
+                    console.log('[DEBUG] formatted to_hour:  ', formatOutofficeTime(r0.to_hour));
+                }
                 OUTOFFICE_DIRTY = false;
             } catch(e) {
                 console.error('Lỗi tải outoffice:', e);
@@ -1839,26 +1847,55 @@
         }
 
         function formatOutofficeTime(t) {
-            if (!t) return '';
-            // Nếu là ISO string (có chữ T), đọc thẳng phần giờ:phút từ string
-            // KHÔNG dùng new Date().getHours() để tránh lệch timezone trên các máy khác nhau
-            if (typeof t === 'string' && t.includes('T')) {
-                // Dạng: "2026-05-08T08:00:00.000Z" hoặc "2026-05-08T08:00:00+07:00"
-                const timePart = t.split('T')[1]; // "08:00:00.000Z" hoặc "08:00:00+07:00"
-                if (timePart) {
-                    const hhmm = timePart.substring(0, 5); // "08:00"
-                    return hhmm;
+            if (!t && t !== 0) return '';
+
+            // --- Trường hợp 1: Số thập phân (GSheet Time serial, e.g. 0.3333 = 08:00) ---
+            if (typeof t === 'number') {
+                const totalMin = Math.round(t * 24 * 60);
+                const hh = Math.floor(totalMin / 60) % 24;
+                const mm = totalMin % 60;
+                return `${hh.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')}`;
+            }
+
+            // --- Trường hợp 2: Chuỗi ---
+            if (typeof t === 'string') {
+                const s = t.trim();
+
+                // "HH:mm" hoặc "HH:mm:ss" — đã đúng, trả thẳng
+                if (/^\d{1,2}:\d{2}/.test(s)) return s.substring(0, 5);
+
+                // ISO epoch GSheet: "1899-12-30T..." hoặc "1899-12-29T..."
+                // Apps Script serialize Time cell thành UTC ISO.
+                // Spreadsheet timezone VN (UTC+7): 08:00 ICT → 01:00 UTC → "1899-12-30T01:00:00Z"
+                // → lấy giờ UTC rồi cộng +7h để ra giờ VN
+                if (s.startsWith('1899-12-30') || s.startsWith('1899-12-29')) {
+                    const d = new Date(s);
+                    if (!isNaN(d)) {
+                        const hh = (d.getUTCHours() + 7) % 24;
+                        const mm = d.getUTCMinutes();
+                        return `${hh.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')}`;
+                    }
                 }
+
+                // ISO thông thường có T (e.g. "2025-01-01T08:00:00+07:00")
+                if (s.includes('T')) {
+                    const d = new Date(s);
+                    if (!isNaN(d)) {
+                        // Dùng giờ local của trình duyệt (đã có timezone offset trong chuỗi)
+                        return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+                    }
+                }
+
+                return s.substring(0, 5);
             }
-            // Nếu là chuỗi HH:MM hoặc HH:MM:SS thuần
-            if (typeof t === 'string' && !t.includes('T')) {
-                return t.substring(0, 5);
-            }
-            // Nếu là Date object (không khuyến khích, nhưng vẫn xử lý)
+
+            // --- Trường hợp 3: Date object ---
             if (t instanceof Date) {
-                return `${t.getHours().toString().padStart(2,'0')}:${t.getMinutes().toString().padStart(2,'0')}`;
+                // Apps Script trả Date object (trước khi JSON) → getUTCH + 7
+                return `${((t.getUTCHours() + 7) % 24).toString().padStart(2,'0')}:${t.getUTCMinutes().toString().padStart(2,'0')}`;
             }
-            return t;
+
+            return String(t).substring(0, 5);
         }
 
         // Parse ngày outoffice về YYYY-MM-DD theo giờ Việt Nam (UTC+7)
