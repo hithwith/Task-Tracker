@@ -327,7 +327,7 @@
                         <button onclick="openTaskForm()" class="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:shadow-blue-200">THÊM MỚI +</button>
                     </div>
                     
-                    <div id="adv-filter-task" class="hidden mt-6 pt-6 border-t grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div id="adv-filter-task" class="mt-6 pt-6 border-t" style="display:none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem;">
                         <div class="space-y-1">
                             <label class="text-xs font-bold uppercase">Ngày tạo (Từ - Đến)</label>
                             <div class="flex gap-2"><input type="text" id="adv_c_start" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"><input type="text" id="adv_c_end" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"></div>
@@ -399,37 +399,69 @@
             `).join('');
         }
 
-        async function applyTaskFilter() {
-            const stList = Array.from(document.querySelectorAll('#adv_st_list input:checked')).map(i => i.value);
-            const cStart = document.getElementById('adv_c_start').value;
-            const cEnd = document.getElementById('adv_c_end').value;
-            const dStart = document.getElementById('adv_d_start').value;
-            const dEnd = document.getElementById('adv_d_end').value;
-            const projectCode = document.getElementById('adv_project').value;
-            const userId = document.getElementById('adv_user').value;
+        function applyTaskFilter() {
+            try {
+                const stList = Array.from(document.querySelectorAll('#adv_st_list input:checked')).map(i => i.value);
+                const cStart = document.getElementById('adv_c_start').value;
+                const cEnd = document.getElementById('adv_c_end').value;
+                const dStart = document.getElementById('adv_d_start').value;
+                const dEnd = document.getElementById('adv_d_end').value;
+                const projectCode = document.getElementById('adv_project').value;
+                const userId = document.getElementById('adv_user').value;
 
-            const filtered = ALL_TASKS.filter(t => {
-                const matchStatus = stList.length === 0 || stList.includes(String(t.status));
-                const matchProject = !projectCode || t.project_code === projectCode;
-                const matchUser = !userId || String(t.user_id) === String(userId);
-                
-                let matchC = true;
-                if (t.datetime0) {
-                    const dateC = parseLocalDate(t.datetime0);
-                    if (cStart && dateC < parseLocalDate(cStart)) matchC = false;
-                    if (cEnd && dateC > parseLocalDate(cEnd)) matchC = false;
-                }
+                const filtered = ALL_TASKS.filter(t => {
+                    const matchStatus = stList.length === 0 || stList.includes(String(t.status));
+                    const matchProject = !projectCode || t.project_code === projectCode;
+                    const matchUser = !userId || String(t.user_id) === String(userId);
 
-                let matchD = true;
-                if (t.due_date) {
-                    const dateD = parseLocalDate(t.due_date);
-                    if (dStart && dateD < parseLocalDate(dStart)) matchD = false;
-                    if (dEnd && dateD > parseLocalDate(dEnd)) matchD = false;
+                    let matchC = true;
+                    if (t.datetime0 && (cStart || cEnd)) {
+                        const dateC = parseLocalDate(t.datetime0);
+                        if (dateC) {
+                            if (cStart) { const ds = parseLocalDate(cStart); if (ds && dateC < ds) matchC = false; }
+                            if (cEnd)   { const de = parseLocalDate(cEnd);   if (de && dateC > de) matchC = false; }
+                        }
+                    }
+
+                    let matchD = true;
+                    if (t.due_date && (dStart || dEnd)) {
+                        const dateD = parseLocalDate(t.due_date);
+                        if (dateD) {
+                            if (dStart) { const ds = parseLocalDate(dStart); if (ds && dateD < ds) matchD = false; }
+                            if (dEnd)   { const de = parseLocalDate(dEnd);   if (de && dateD > de) matchD = false; }
+                        }
+                    }
+                    return matchStatus && matchProject && matchUser && matchC && matchD;
+                });
+
+                const tbody = document.getElementById('task-table-body');
+                if (!tbody) { console.error('task-table-body not found'); return; }
+                tbody.innerHTML = filtered.length > 0
+                    ? renderTaskRows(filtered)
+                    : '<tr><td colspan="6" class="p-8 text-center text-slate-400 text-sm font-bold">Không tìm thấy công việc nào phù hợp với bộ lọc</td></tr>';
+
+                // Đóng panel và scroll xuống bảng
+                const panel = document.getElementById('adv-filter-task');
+                if (panel) panel.style.display = 'none';
+                tbody.closest('table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                // Hiện thông báo số kết quả
+                const btn = document.querySelector('[onclick="applyTaskFilter()"]');
+                if (btn) {
+                    const orig = btn.textContent;
+                    btn.textContent = 'Tìm thấy ' + filtered.length + ' việc';
+                    btn.classList.add('bg-green-700');
+                    btn.classList.remove('bg-slate-800');
+                    setTimeout(() => {
+                        btn.textContent = orig;
+                        btn.classList.remove('bg-green-700');
+                        btn.classList.add('bg-slate-800');
+                    }, 2500);
                 }
-                return matchStatus && matchProject && matchUser && matchC && matchD;
-            });
-            document.getElementById('task-table-body').innerHTML = renderTaskRows(filtered);
-            toggleAdvance('task');
+            } catch(err) {
+                console.error('applyTaskFilter error:', err);
+                alert('Lỗi bộ lọc: ' + err.message);
+            }
         }
 
         // --- 10.02 LỊCH ---
@@ -437,8 +469,6 @@
             const container = document.getElementById('main-content');
             const year = currentCalDate.getFullYear();
             const month = currentCalDate.getMonth();
-            const firstDay = new Date(year, month, 1).getDay();
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
 
             const tasksToDisplay = dataToRender || ALL_TASKS.filter(t => (t.status == 0 || t.status == 3) && String(t.user_id) === String(SESSION.user.user_id));
 
@@ -447,65 +477,110 @@
                     <div class="flex justify-between items-center mb-6">
                         <div class="flex gap-2">
                             <button onclick="changeMonth(-1)" class="w-10 h-10 bg-gray-50 rounded-xl border flex items-center justify-center font-bold">◀</button>
-                            <h3 class="text-2xl font-black text-slate-800 px-4 flex items-center">THÁNG ${(month+1)} / ${year}</h3>
+                            <h3 id="cal-month-title" class="text-2xl font-black text-slate-800 px-4 flex items-center">THÁNG ${(month+1)} / ${year}</h3>
                             <button onclick="changeMonth(1)" class="w-10 h-10 bg-gray-50 rounded-xl border flex items-center justify-center font-bold">▶</button>
                         </div>
                         <button onclick="toggleAdvance('cal')" class="px-5 py-2.5 bg-slate-100 rounded-xl font-bold text-sm">Bộ lọc lịch</button>
                     </div>
                     
-                    <div id="adv-filter-cal" class="hidden mb-8 p-6 bg-slate-50 rounded-2xl grid grid-cols-4 gap-4 border">
+                    <div id="adv-filter-cal" class="mb-8 p-6 bg-slate-50 rounded-2xl border" style="display:none; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem;">
                         <div><label class="text-xs font-bold uppercase">Hạn từ - Đến</label><div class="flex gap-2"><input type="text" id="cal_d_start" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"><input type="text" id="cal_d_end" class="date-mask w-full p-2 border rounded-lg text-xs" placeholder="DD/MM/YYYY" maxlength="10"></div></div>
                         <div><label class="text-xs font-bold uppercase">Người thực hiện</label><select id="cal_user" class="w-full p-2 border rounded-lg text-xs"><option value="">Tất cả</option>${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${String(u.user_id) === String(SESSION.user.user_id) ? 'selected' : ''}>${u.username}</option>`).join('')}</select></div>
                         <div><label class="text-xs font-bold uppercase">Trạng thái</label><div class="multi-select-box text-[10px]" id="cal_st_list">${MASTER_DATA.statuses.map(s => `<label class="block"><input type="checkbox" value="${s.status_code}" ${(s.status_code == 0 || s.status_code == 3) ? 'checked' : ''}> ${s.status_name}</label>`).join('')}</div></div>
                         <div class="flex items-end"><button onclick="applyCalFilter()" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm">LỌC LỊCH</button></div>
                     </div>
 
-                    <div class="grid grid-cols-7 gap-px bg-slate-200 border rounded-xl overflow-hidden shadow-inner">
-                        ${['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(d => `<div class="bg-slate-50 p-3 text-center font-black text-[10px] text-slate-400">${d}</div>`).join('')}
-                        ${Array(firstDay).fill('').map(() => `<div class="bg-slate-50 p-2 min-h-[8rem]"></div>`).join('')}
-                        ${Array.from({length: daysInMonth}, (_, i) => {
-                            const d = i + 1;
-                            const dStr = `${year}-${(month+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
-                            const cellDate = new Date(year, month, d);
-                            const todayMid = new Date(); todayMid.setHours(0,0,0,0);
-                            const isOverdueCell = cellDate < todayMid;
-                            const dayTasks = tasksToDisplay.filter(t => t.due_date && t.due_date.startsWith(dStr));
-                            return `<div class="bg-white p-2 min-h-[8rem] border-t hover:bg-blue-50/50 cursor-pointer">
-                                <div class="text-xs font-black mb-1 ${(d == new Date().getDate() && month == new Date().getMonth() && year == new Date().getFullYear()) ? 'text-blue-600 bg-blue-50 w-6 h-6 flex items-center justify-center rounded-full' : ''}">${d}</div>
-                                ${dayTasks.map(t => {
-                                    const isOverdue = isOverdueCell && t.status != 5;
-                                    const chipCls = isOverdue
-                                        ? 'bg-rose-100 text-rose-700 border border-rose-300'
-                                        : 'bg-blue-100 text-blue-700';
-                                    return `<div class="text-[8px] ${chipCls} p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal" onclick="openTaskForm(${JSON.stringify(t).replace(/"/g,'&quot;')})">(${t.project_code}) ${t.task_name}</div>`;
-                                }).join('')}
-                            </div>`;
-                        }).join('')}
-                    </div>
+                    <div id="cal-grid-wrapper"></div>
                 </div>`;
             initDateMasks();
+            renderCalendarGrid(tasksToDisplay);
         }
 
-        async function applyCalFilter() {
-            const stList = Array.from(document.querySelectorAll('#cal_st_list input:checked')).map(i => i.value);
-            const uId = document.getElementById('cal_user').value;
-            const dStart = document.getElementById('cal_d_start').value;
-            const dEnd = document.getElementById('cal_d_end').value;
+        function renderCalendarGrid(tasksToDisplay) {
+            const year = currentCalDate.getFullYear();
+            const month = currentCalDate.getMonth();
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-            const filtered = ALL_TASKS.filter(t => {
-                const matchStatus = stList.length === 0 || stList.includes(String(t.status));
-                const matchUser = !uId || t.user_id == uId;
-                
-                let matchD = true;
-                if (t.due_date) {
-                    const dateD = parseLocalDate(t.due_date);
-                    if (dStart && dateD < parseLocalDate(dStart)) matchD = false;
-                    if (dEnd && dateD > parseLocalDate(dEnd)) matchD = false;
+            // Cập nhật tiêu đề tháng nếu đang có sẵn
+            const titleEl = document.getElementById('cal-month-title');
+            if (titleEl) titleEl.textContent = `THÁNG ${month+1} / ${year}`;
+
+            const wrapper = document.getElementById('cal-grid-wrapper');
+            if (!wrapper) return;
+
+            wrapper.innerHTML = `
+                <div class="grid grid-cols-7 gap-px bg-slate-200 border rounded-xl overflow-hidden shadow-inner">
+                    ${['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(d => `<div class="bg-slate-50 p-3 text-center font-black text-[10px] text-slate-400">${d}</div>`).join('')}
+                    ${Array(firstDay).fill('').map(() => `<div class="bg-slate-50 p-2 min-h-[8rem]"></div>`).join('')}
+                    ${Array.from({length: daysInMonth}, (_, i) => {
+                        const d = i + 1;
+                        const dStr = `${year}-${(month+1).toString().padStart(2,'0')}-${d.toString().padStart(2,'0')}`;
+                        const cellDate = new Date(year, month, d);
+                        const todayMid = new Date(); todayMid.setHours(0,0,0,0);
+                        const isOverdueCell = cellDate < todayMid;
+                        const dayTasks = tasksToDisplay.filter(t => {
+                            if (!t.due_date) return false;
+                            const ld = parseLocalDate(t.due_date);
+                            if (!ld) return false;
+                            return ld.getFullYear() === year && ld.getMonth() === month && ld.getDate() === d;
+                        });
+                        return `<div class="bg-white p-2 min-h-[8rem] border-t hover:bg-blue-50/50 cursor-pointer">
+                            <div class="text-xs font-black mb-1 ${(d == new Date().getDate() && month == new Date().getMonth() && year == new Date().getFullYear()) ? 'text-blue-600 bg-blue-50 w-6 h-6 flex items-center justify-center rounded-full' : ''}">${d}</div>
+                            ${dayTasks.map(t => {
+                                const isOverdue = isOverdueCell && t.status != 5;
+                                const chipCls = isOverdue
+                                    ? 'bg-rose-100 text-rose-700 border border-rose-300'
+                                    : 'bg-blue-100 text-blue-700';
+                                return `<div class="text-[8px] ${chipCls} p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal" onclick="openTaskForm(${JSON.stringify(t).replace(/"/g,'&quot;')})">(${t.project_code}) ${t.task_name}</div>`;
+                            }).join('')}
+                        </div>`;
+                    }).join('')}
+                </div>`;
+        }
+
+        function applyCalFilter() {
+            try {
+                const stList = Array.from(document.querySelectorAll('#cal_st_list input:checked')).map(i => i.value);
+                const uId = document.getElementById('cal_user').value;
+                const dStart = document.getElementById('cal_d_start').value;
+                const dEnd = document.getElementById('cal_d_end').value;
+
+                const filtered = ALL_TASKS.filter(t => {
+                    const matchStatus = stList.length === 0 || stList.includes(String(t.status));
+                    const matchUser = !uId || String(t.user_id) == String(uId);
+
+                    let matchD = true;
+                    if (t.due_date && (dStart || dEnd)) {
+                        const dateD = parseLocalDate(t.due_date);
+                        if (dateD) {
+                            if (dStart) { const ds = parseLocalDate(dStart); if (ds && dateD < ds) matchD = false; }
+                            if (dEnd)   { const de = parseLocalDate(dEnd);   if (de && dateD > de) matchD = false; }
+                        }
+                    }
+                    return matchStatus && matchUser && matchD;
+                });
+
+                renderCalendarGrid(filtered);
+
+                const panel = document.getElementById('adv-filter-cal');
+                if (panel) panel.style.display = 'none';
+
+                // Hiện thông báo số kết quả
+                const btn = document.querySelector('[onclick="applyCalFilter()"]');
+                if (btn) {
+                    const orig = btn.textContent;
+                    btn.textContent = 'Lọc ' + filtered.length + ' việc';
+                    btn.style.backgroundColor = '#15803d';
+                    setTimeout(() => {
+                        btn.textContent = orig;
+                        btn.style.backgroundColor = '';
+                    }, 2500);
                 }
-                return matchStatus && matchUser && matchD;
-            });
-            renderCalendar(filtered); 
-            toggleAdvance('cal');
+            } catch(err) {
+                console.error('applyCalFilter error:', err);
+                alert('Lỗi bộ lọc lịch: ' + err.message);
+            }
         }
 
         // --- 10.03 DASHBOARD ---
@@ -737,25 +812,78 @@
         }
 
         // --- CÁC HÀM CÔNG VIỆC KHÁC ---
+        function isValidDate(str) {
+            // Kiểm tra DD/MM/YYYY hợp lệ đầy đủ
+            if (!str) return false;
+            const parts = str.split('/');
+            if (parts.length !== 3) return false;
+            const [d, m, y] = parts.map(Number);
+            if (!d || !m || !y || y < 1000 || y > 9999) return false;
+            if (m < 1 || m > 12) return false;
+            if (d < 1 || d > 31) return false;
+            const dt = new Date(y, m - 1, d);
+            return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+        }
+
+        function highlightInvalidDate(name, msg) {
+            const el = document.querySelector('[name="' + name + '"]');
+            if (el) {
+                el.style.borderColor = '#ef4444';
+                el.focus();
+                el.title = msg;
+                el.placeholder = msg;
+                el.addEventListener('input', function fix() {
+                    el.style.borderColor = '';
+                    el.placeholder = 'DD/MM/YYYY';
+                    el.title = '';
+                    el.removeEventListener('input', fix);
+                }, { once: true });
+            }
+        }
+
         function openTaskForm(t = null) {
             const isEdit = !!t;
             const html = `
-                <div id="task-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-4">
-                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-                        <div class="p-5 bg-slate-900 text-white font-black flex justify-between uppercase tracking-widest"><span>Chi tiết công việc</span><button onclick="closeModal('task-modal')">&times;</button></div>
-                        <form id="form-task" class="p-8 grid grid-cols-2 gap-6">
+                <div id="task-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-3">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden" style="max-height:96vh;display:flex;flex-direction:column;">
+                        <div class="px-5 py-3 bg-slate-900 text-white font-black flex justify-between uppercase tracking-widest flex-shrink-0"><span>Chi tiết công việc</span><button onclick="closeModal('task-modal')" class="text-xl leading-none">&times;</button></div>
+                        <form id="form-task" class="p-4 grid grid-cols-3 gap-x-4 gap-y-2 overflow-y-auto" style="flex:1;">
                             <input type="hidden" name="id" value="${t?.id || ''}">
-                            <div class="col-span-2"><label class="text-[10px] font-black uppercase text-slate-400">Tên công việc *</label><input type="text" name="task_name" required value="${t?.task_name || ''}" class="w-full p-3 border-2 rounded-xl outline-none focus:border-blue-400"></div>
-                            <div class="col-span-2"><label class="text-[10px] font-black uppercase text-slate-400">Mô tả</label><textarea name="description" class="w-full p-3 border-2 rounded-xl h-20 outline-none">${t?.description || ''}</textarea></div>
-                            <div><label class="text-[10px] font-black uppercase text-slate-400">Dự án</label><select name="project_code" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.projects.filter(p => p.status == 1).map(p => `<option value="${p.project_code}" ${t?.project_code == p.project_code ? 'selected' : ''}>${p.project_name}</option>`).join('')}</select></div>
-                            <div><label class="text-[10px] font-black uppercase text-slate-400">Người thực hiện</label><select name="user_id" id="task_user_id" onchange="onTaskUserChange()" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${t?.user_id == u.user_id ? 'selected' : (isEdit ? '' : (SESSION.user.user_id == u.user_id ? 'selected' : ''))}>${u.username}</option>`).join('')}</select></div>
-                            <div><label class="text-[10px] font-black uppercase text-slate-400">Ngày bắt đầu</label><input type="text" name="start_date" class="date-mask w-full p-3 border-2 rounded-xl" placeholder="DD/MM/YYYY" maxlength="10" value="${formatDate(t?.start_date || new Date().toISOString())}"></div>
-                            <div><label class="text-[10px] font-black uppercase text-slate-400">Ngày đến hạn *</label><input type="text" name="due_date" required class="date-mask w-full p-3 border-2 rounded-xl" placeholder="DD/MM/YYYY" maxlength="10" value="${t?.due_date ? formatDate(t.due_date) : ''}"></div>
-                            <div><label class="text-[10px] font-black uppercase text-slate-400">Ưu tiên</label><select name="priority" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.priorities.map(p => `<option value="${p.priority_code}" ${t ? (t.priority == p.priority_code ? 'selected' : '') : (String(p.priority_code).toLowerCase() === 'medium' || String(p.priority_name).toLowerCase().includes('medium') || String(p.priority_name).toLowerCase().includes('trung bình') ? 'selected' : '')}>${p.priority_name}</option>`).join('')}</select></div>
-                            <div><label class="text-[10px] font-black uppercase text-slate-400">Trạng thái</label><select name="status" class="w-full p-3 border-2 rounded-xl">${MASTER_DATA.statuses.map(s => `<option value="${s.status_code}" ${t?.status == s.status_code ? 'selected' : ''}>${s.status_name}</option>`).join('')}</select></div>
-                            <div class="col-span-2 relative" id="noti_user_wrapper">
+                            <div class="col-span-3">
+                                <label class="text-[10px] font-black uppercase text-slate-400">Tên công việc *</label>
+                                <input type="text" name="task_name" required value="${t?.task_name || ''}" class="w-full px-3 py-2 border-2 rounded-lg text-sm outline-none focus:border-blue-400">
+                            </div>
+                            <div class="col-span-3">
+                                <label class="text-[10px] font-black uppercase text-slate-400">Mô tả</label>
+                                <textarea name="description" class="w-full px-3 py-2 border-2 rounded-lg text-sm outline-none resize-none" style="height:56px;">${t?.description || ''}</textarea>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Dự án</label>
+                                <select name="project_code" class="w-full px-3 py-2 border-2 rounded-lg text-sm">${MASTER_DATA.projects.filter(p => p.status == 1).map(p => `<option value="${p.project_code}" ${t?.project_code == p.project_code ? 'selected' : ''}>${p.project_name}</option>`).join('')}</select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Người thực hiện</label>
+                                <select name="user_id" id="task_user_id" onchange="onTaskUserChange()" class="w-full px-3 py-2 border-2 rounded-lg text-sm">${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${t?.user_id == u.user_id ? 'selected' : (isEdit ? '' : (SESSION.user.user_id == u.user_id ? 'selected' : ''))}>${u.username}</option>`).join('')}</select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Ưu tiên</label>
+                                <select name="priority" class="w-full px-3 py-2 border-2 rounded-lg text-sm">${MASTER_DATA.priorities.map(p => `<option value="${p.priority_code}" ${t ? (t.priority == p.priority_code ? 'selected' : '') : (String(p.priority_code).toLowerCase() === 'medium' || String(p.priority_name).toLowerCase().includes('medium') || String(p.priority_name).toLowerCase().includes('trung bình') ? 'selected' : '')}>${p.priority_name}</option>`).join('')}</select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Ngày bắt đầu</label>
+                                <input type="text" name="start_date" id="input_start_date" class="date-mask w-full px-3 py-2 border-2 rounded-lg text-sm" placeholder="DD/MM/YYYY" maxlength="10" value="${formatDate(t?.start_date || new Date().toISOString())}">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Ngày đến hạn * <span class="text-[9px] text-slate-300 font-normal normal-case">(DD/MM/YYYY)</span></label>
+                                <input type="text" name="due_date" id="input_due_date" class="date-mask w-full px-3 py-2 border-2 rounded-lg text-sm" placeholder="DD/MM/YYYY" maxlength="10" value="${t?.due_date ? formatDate(t.due_date) : ''}">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Trạng thái</label>
+                                <select name="status" class="w-full px-3 py-2 border-2 rounded-lg text-sm">${MASTER_DATA.statuses.map(s => `<option value="${s.status_code}" ${t?.status == s.status_code ? 'selected' : ''}>${s.status_name}</option>`).join('')}</select>
+                            </div>
+                            <div class="col-span-3 relative" id="noti_user_wrapper">
                                 <label class="text-[10px] font-black uppercase text-slate-400">Người nhận thông báo</label>
-                                <div id="noti_user_trigger" onclick="toggleNotiDropdown()" class="mt-1 w-full p-3 border-2 rounded-xl flex items-center justify-between cursor-pointer hover:border-blue-400 transition select-none bg-white">
+                                <div id="noti_user_trigger" onclick="toggleNotiDropdown()" class="mt-0.5 w-full px-3 py-2 border-2 rounded-lg text-sm flex items-center justify-between cursor-pointer hover:border-blue-400 transition select-none bg-white">
                                     <span id="noti_user_display" class="text-sm text-slate-500 truncate">-- Chưa chọn --</span>
                                     <span class="text-slate-400 text-xs ml-2 flex-shrink-0" id="noti_user_arrow">▼</span>
                                 </div>
@@ -764,18 +892,18 @@
                                         <button type="button" onclick="notiSelectAll(true)" class="flex-1 text-[10px] font-black py-1 bg-blue-100 text-blue-700 rounded-lg">Chọn tất cả</button>
                                         <button type="button" onclick="notiSelectAll(false)" class="flex-1 text-[10px] font-black py-1 bg-slate-200 text-slate-600 rounded-lg">Bỏ chọn</button>
                                     </div>
-                                    <div class="max-h-44 overflow-y-auto" id="noti_user_list">
+                                    <div class="max-h-36 overflow-y-auto" id="noti_user_list">
                                         ${MASTER_DATA.users.map(u => {
                                             const existingNoti = t?.noti_user ? String(t.noti_user).split(',').map(x=>x.trim()) : [];
                                             const checked = existingNoti.includes(String(u.user_id));
-                                            return '<label class="flex items-center gap-2.5 px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm border-b border-slate-50 last:border-0"><input type="checkbox" class="noti-user-cb w-4 h-4 accent-blue-600" value="' + u.user_id + '" onchange="updateNotiDisplay()" ' + (checked ? 'checked' : '') + '> <span class="font-medium text-slate-700">' + u.username + '</span></label>';
+                                            return '<label class="flex items-center gap-2 px-3 py-1.5 hover:bg-blue-50 cursor-pointer text-sm border-b border-slate-50 last:border-0"><input type="checkbox" class="noti-user-cb w-4 h-4 accent-blue-600" value="' + u.user_id + '" onchange="updateNotiDisplay()" ' + (checked ? 'checked' : '') + '> <span class="font-medium text-slate-700">' + u.username + '</span></label>';
                                         }).join('')}
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-span-2 flex justify-between mt-4 border-t pt-6">
-                                ${isEdit ? `<button type="button" onclick="doDeleteTask('${t.id}')" class="px-6 py-3 bg-red-100 text-red-600 rounded-xl font-bold">XÓA DÒNG</button>` : '<div></div>'}
-                                <div class="flex gap-3"><button type="button" onclick="closeModal('task-modal')" class="px-8 py-3 bg-gray-100 rounded-xl font-bold">HỦY</button><button type="submit" class="px-10 py-3 bg-blue-600 text-white rounded-xl font-black shadow-lg shadow-blue-200">LƯU THÔNG TIN</button></div>
+                            <div class="col-span-3 flex justify-between border-t pt-3 mt-1 pb-1">
+                                ${isEdit ? `<button type="button" onclick="doDeleteTask('${t.id}')" class="px-5 py-2 bg-red-100 text-red-600 rounded-xl font-bold text-sm">XÓA DÒNG</button>` : '<div></div>'}
+                                <div class="flex gap-3"><button type="button" onclick="closeModal('task-modal')" class="px-6 py-2 bg-gray-100 rounded-xl font-bold text-sm">HỦY</button><button type="submit" class="px-8 py-2 bg-blue-600 text-white rounded-xl font-black shadow-lg shadow-blue-200 text-sm">LƯU THÔNG TIN</button></div>
                             </div>
                         </form>
                     </div>
@@ -787,6 +915,20 @@
                 e.preventDefault();
                 const formData = new FormData(e.target);
                 const data = Object.fromEntries(formData.entries());
+
+                // --- Validate ngày trước khi lưu ---
+                const startVal = data['start_date'];
+                const dueVal   = data['due_date'];
+
+                if (startVal && !isValidDate(startVal)) {
+                    highlightInvalidDate('start_date', 'Ngày không hợp lệ! Nhập đủ DD/MM/YYYY');
+                    return;
+                }
+                if (!dueVal || !isValidDate(dueVal)) {
+                    highlightInvalidDate('due_date', 'Vui lòng nhập đủ ngày/tháng/năm');
+                    return;
+                }
+
                 // Convert DD/MM/YYYY -> YYYY-MM-DD cho API
                 ['start_date','due_date'].forEach(k => {
                     if (data[k] && data[k].includes('/')) {
@@ -953,8 +1095,47 @@
         }
 
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-        function toggleAdvance(type) { document.getElementById(`adv-filter-${type}`).classList.toggle('hidden'); }
-        function changeMonth(s) { currentCalDate.setMonth(currentCalDate.getMonth() + s); renderCalendar(); }
+        function toggleAdvance(type) {
+            const el = document.getElementById('adv-filter-' + type);
+            if (!el) return;
+            if (el.style.display === '' || el.style.display === 'none') {
+                el.style.display = 'grid';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+        function changeMonth(s) {
+            currentCalDate.setMonth(currentCalDate.getMonth() + s);
+            // Nếu bộ lọc đang mở/đã áp dụng, chỉ re-render grid
+            const gridWrapper = document.getElementById('cal-grid-wrapper');
+            if (gridWrapper) {
+                // Re-apply filter nếu có
+                const stListEl = document.getElementById('cal_st_list');
+                const uIdEl = document.getElementById('cal_user');
+                if (stListEl && uIdEl) {
+                    const stList = Array.from(stListEl.querySelectorAll('input:checked')).map(i => i.value);
+                    const uId = uIdEl.value;
+                    const dStart = document.getElementById('cal_d_start')?.value || '';
+                    const dEnd = document.getElementById('cal_d_end')?.value || '';
+                    const filtered = ALL_TASKS.filter(t => {
+                        const matchStatus = stList.length === 0 || stList.includes(String(t.status));
+                        const matchUser = !uId || String(t.user_id) == String(uId);
+                        let matchD = true;
+                        if (t.due_date) {
+                            const dateD = parseLocalDate(t.due_date);
+                            if (dStart && dateD < parseLocalDate(dStart)) matchD = false;
+                            if (dEnd && dateD > parseLocalDate(dEnd)) matchD = false;
+                        }
+                        return matchStatus && matchUser && matchD;
+                    });
+                    renderCalendarGrid(filtered);
+                } else {
+                    renderCalendar();
+                }
+            } else {
+                renderCalendar();
+            }
+        }
         
         // Parse datetime0 format: "DD/MM/YYYY H:MM:SS" -> Date object
         function parseDatetime0(str) {
@@ -978,6 +1159,13 @@
                 if (!d || !m || !y || y < 1000) return null;
                 return new Date(y, m - 1, d);
             }
+            // Nếu chuỗi có timezone (kết thúc Z hoặc có +/-HH:MM),
+            // convert sang local time trước khi lấy ngày, tránh lệch múi giờ UTC
+            if (str.includes('T') && (str.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(str))) {
+                const localDate = new Date(str);
+                return new Date(localDate.getFullYear(), localDate.getMonth(), localDate.getDate());
+            }
+            // Format YYYY-MM-DD hoặc YYYY-MM-DDTHH:MM:SS (không có timezone) -> parse trực tiếp
             const [y, m, d] = str.split('T')[0].split('-').map(Number);
             return new Date(y, m - 1, d);
         }
@@ -2118,7 +2306,30 @@
             }
         }
 
-    </script>
+
+        // Gắn tất cả function vào window để inline onclick trong innerHTML luôn tìm thấy
+        window.applyTaskFilter = applyTaskFilter;
+        window.applyCalFilter = applyCalFilter;
+        window.toggleAdvance = toggleAdvance;
+        window.openTaskForm = openTaskForm;
+        window.doQuickSearch = doQuickSearch;
+        window.applyDashboardFilter = applyDashboardFilter;
+        window.changeMonth = changeMonth;
+        window.renderCalendar = renderCalendar;
+        window.doQuickStart = doQuickStart;
+        window.doQuickDone = doQuickDone;
+        window.doDeleteTask = doDeleteTask;
+        window.closeModal = closeModal;
+        window.handleLogin = handleLogin;
+        window.logout = logout;
+        window.showDeadlinePanel = showDeadlinePanel;
+        window.closeDeadlinePanel = closeDeadlinePanel;
+        window.closeToast = closeToast;
+        window.closeConfirm = closeConfirm;
+        window.markNotiRead = markNotiRead;
+        window.markAllNotiRead = markAllNotiRead;
+        window.requestNotifPermission = requestNotifPermission;
+        </script>
 
     <!-- Deadline Notification Panel -->
     <div id="deadline-panel" class="modal-bg fixed inset-0 hidden flex items-start justify-end p-4 pt-16" onclick="if(event.target===this)closeDeadlinePanel()">
