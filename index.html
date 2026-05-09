@@ -21,6 +21,89 @@
         .active-menu { background-color: #2563eb !important; border-left: 4px solid #fff; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .multi-select-box { max-height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 5px; border-radius: 5px; }
+
+        /* ===== DATE PICKER ===== */
+        .dp-wrapper { position: relative; display: flex; align-items: center; }
+        .dp-wrapper input { flex: 1; }
+        .dp-icon-btn {
+            position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; cursor: pointer; padding: 2px 4px;
+            font-size: 16px; line-height: 1; color: #64748b; z-index: 2;
+            transition: color 0.15s;
+        }
+        .dp-icon-btn:hover { color: #2563eb; }
+        .dp-wrapper input { padding-right: 2rem !important; }
+
+        .dp-popup {
+            position: absolute; top: calc(100% + 4px); left: 0;
+            background: #fff; border: 1.5px solid #e2e8f0; border-radius: 14px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.13); z-index: 9999;
+            min-width: 280px; padding: 14px; user-select: none;
+            animation: dpFadeIn 0.12s ease;
+        }
+        .dp-popup.dp-align-right { left: auto; right: 0; }
+        @keyframes dpFadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+        .dp-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .dp-nav-btn {
+            width: 30px; height: 30px; border: none; background: #f1f5f9;
+            border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 900;
+            color: #334155; display: flex; align-items: center; justify-content: center;
+            transition: background 0.12s;
+        }
+        .dp-nav-btn:hover { background: #2563eb; color: #fff; }
+        .dp-month-year {
+            font-size: 13px; font-weight: 900; color: #1e293b;
+            cursor: pointer; padding: 4px 10px; border-radius: 8px;
+            transition: background 0.12s;
+        }
+        .dp-month-year:hover { background: #f1f5f9; }
+
+        .dp-weekdays {
+            display: grid; grid-template-columns: repeat(7, 1fr);
+            margin-bottom: 4px;
+        }
+        .dp-wd {
+            text-align: center; font-size: 9px; font-weight: 900;
+            color: #94a3b8; padding: 3px 0; text-transform: uppercase;
+        }
+        .dp-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+        .dp-day {
+            text-align: center; font-size: 12px; font-weight: 600; padding: 6px 2px;
+            border-radius: 8px; cursor: pointer; color: #334155; transition: background 0.1s, color 0.1s;
+        }
+        .dp-day:hover:not(.dp-empty):not(.dp-selected) { background: #eff6ff; color: #2563eb; }
+        .dp-day.dp-today { color: #2563eb; font-weight: 900; }
+        .dp-day.dp-selected { background: #2563eb; color: #fff !important; border-radius: 8px; }
+        .dp-day.dp-empty { cursor: default; }
+        .dp-day.dp-other-month { color: #cbd5e1; }
+
+        .dp-footer { margin-top: 10px; border-top: 1px solid #f1f5f9; padding-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .dp-today-btn {
+            font-size: 11px; font-weight: 700; color: #2563eb; background: #eff6ff;
+            border: none; border-radius: 7px; padding: 4px 10px; cursor: pointer;
+        }
+        .dp-today-btn:hover { background: #dbeafe; }
+        .dp-clear-btn {
+            font-size: 11px; font-weight: 700; color: #ef4444; background: #fef2f2;
+            border: none; border-radius: 7px; padding: 4px 10px; cursor: pointer;
+        }
+        .dp-clear-btn:hover { background: #fee2e2; }
+
+        /* Month/Year picker view */
+        .dp-my-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 4px;
+        }
+        .dp-my-item {
+            text-align: center; font-size: 12px; font-weight: 700; padding: 7px 4px;
+            border-radius: 8px; cursor: pointer; color: #334155;
+            transition: background 0.1s, color 0.1s;
+        }
+        .dp-my-item:hover { background: #eff6ff; color: #2563eb; }
+        .dp-my-item.dp-my-selected { background: #2563eb; color: #fff; }
     </style>
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
@@ -371,8 +454,32 @@
                                 <th class="p-5">Chi tiết công việc</th>
                                 <th class="p-5 text-center">Bắt đầu</th>
                                 <th class="p-5 text-center">Ngày đến hạn</th>
+                                <th class="p-5 text-center">Ngày hoàn thành</th>
                                 <th class="p-5 text-center">Trạng thái</th>
                                 <th class="p-5 text-right">Thao tác</th>
+                            </tr>
+                            <tr class="bg-white border-b border-slate-100" id="col-filter-row">
+                                <th class="px-3 py-2">
+                                    <select id="cf_project" onchange="applyColFilter()" class="w-full p-1.5 border border-slate-200 rounded-lg text-[11px] font-normal text-slate-600 outline-none focus:border-blue-400 bg-white">
+                                        <option value="">Tất cả</option>
+                                        ${MASTER_DATA.projects.filter(p => p.status == 1).map(p => `<option value="${p.project_code}">${p.project_code}</option>`).join('')}
+                                    </select>
+                                </th>
+                                <th class="px-3 py-2">
+                                    <input type="text" id="cf_name" oninput="applyColFilter()" placeholder="Tìm tên việc..." class="w-full p-1.5 border border-slate-200 rounded-lg text-[11px] font-normal text-slate-600 outline-none focus:border-blue-400">
+                                </th>
+                                <th></th>
+                                <th></th>
+                                <th></th>
+                                <th class="px-3 py-2">
+                                    <select id="cf_status" onchange="applyColFilter()" class="w-full p-1.5 border border-slate-200 rounded-lg text-[11px] font-normal text-slate-600 outline-none focus:border-blue-400 bg-white">
+                                        <option value="">Tất cả</option>
+                                        ${MASTER_DATA.statuses.map(s => `<option value="${s.status_code}">${s.status_name}</option>`).join('')}
+                                    </select>
+                                </th>
+                                <th class="px-3 py-2 text-right">
+                                    <button onclick="clearColFilter()" title="Xoá bộ lọc cột" class="text-[10px] font-bold text-slate-400 hover:text-red-500 px-2 py-1 rounded-lg hover:bg-red-50 transition">✕ Xoá</button>
+                                </th>
                             </tr>
                         </thead>
                         <tbody class="divide-y" id="task-table-body">${renderTaskRows(filtered)}</tbody>
@@ -381,16 +488,74 @@
             initDateMasks();
         }
 
+        function applyColFilter() {
+            const project  = document.getElementById('cf_project')?.value  || '';
+            const name     = (document.getElementById('cf_name')?.value     || '').toLowerCase().trim();
+            const status   = document.getElementById('cf_status')?.value    || '';
+
+            const hasFilter = project || name || status;
+
+            const base = ACTIVE_FILTER_1001
+                ? _applyFilter1001(ACTIVE_FILTER_1001)
+                : ALL_TASKS.filter(t => t.user_id == SESSION.user.user_id && (t.status == 0 || t.status == 3));
+
+            const result = hasFilter ? base.filter(t => {
+                if (project && t.project_code !== project) return false;
+                if (name && !(t.task_name || '').toLowerCase().includes(name)) return false;
+                if (status && String(t.status) !== String(status)) return false;
+                return true;
+            }) : base;
+
+            const tbody = document.getElementById('task-table-body');
+            if (!tbody) return;
+            tbody.innerHTML = result.length > 0
+                ? renderTaskRows(result)
+                : '<tr><td colspan="7" class="p-8 text-center text-slate-400 text-sm font-bold">Không tìm thấy công việc nào phù hợp</td></tr>';
+
+            ['cf_project','cf_name','cf_status'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (el.value) { el.style.borderColor = '#2563eb'; el.style.background = '#eff6ff'; }
+                else          { el.style.borderColor = ''; el.style.background = ''; }
+            });
+        }
+
+        function clearColFilter() {
+            ['cf_project','cf_name','cf_status'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.value = '';
+                el.style.borderColor = '';
+                el.style.background = '';
+            });
+            applyColFilter();
+        }
+
+        window.applyColFilter = applyColFilter;
+        window.clearColFilter = clearColFilter;
+
         function renderTaskRows(tasks) {
-            return tasks.map(t => `
-                <tr class="hover:bg-blue-50/50 cursor-pointer transition" onclick="openTaskForm(${JSON.stringify(t).replace(/"/g, '&quot;')})">
-                    <td class="p-5 font-bold text-blue-600 text-sm">${t.project_code}</td>
+            const todayMid = new Date(); todayMid.setHours(0,0,0,0);
+            return tasks.map(t => {
+                const isOverdue = t.status != 5 && t.due_date && (() => { const d = parseLocalDate(t.due_date); return d && d < todayMid; })();
+                const rowCls = isOverdue
+                    ? 'bg-rose-50 hover:bg-rose-100 cursor-pointer transition border-l-4 border-rose-400'
+                    : 'hover:bg-blue-50/50 cursor-pointer transition';
+                const nameCls   = isOverdue ? 'font-bold text-rose-700' : 'font-bold text-slate-800';
+                const subCls    = isOverdue ? 'text-xs text-rose-400 font-medium' : 'text-xs text-slate-400 font-medium';
+                const projCls   = isOverdue ? 'p-5 font-bold text-rose-500 text-sm' : 'p-5 font-bold text-blue-600 text-sm';
+                const startCls  = isOverdue ? 'p-5 text-center text-xs text-rose-400' : 'p-5 text-center text-xs text-slate-500';
+                const dueCls    = isOverdue ? 'p-5 text-center text-xs font-black text-rose-600' : 'p-5 text-center text-xs font-black text-orange-600';
+                return `
+                <tr class="${rowCls}" onclick="openTaskForm(${JSON.stringify(t).replace(/"/g, '&quot;')})">
+                    <td class="${projCls}">${isOverdue ? '🔴 ' : ''}${t.project_code}</td>
                     <td class="p-5">
-                        <div class="font-bold text-slate-800">${t.task_name}</div>
-                        <div class="text-xs text-slate-400 font-medium">${getUserName(t.user_id)}</div>
+                        <div class="${nameCls}">${t.task_name}</div>
+                        <div class="${subCls}">${getUserName(t.user_id)}</div>
                     </td>
-                    <td class="p-5 text-center text-xs text-slate-500">${formatDate(t.start_date)}</td>
-                    <td class="p-5 text-center text-xs font-black text-orange-600">${formatDate(t.due_date)}</td>
+                    <td class="${startCls}">${formatDate(t.start_date)}</td>
+                    <td class="${dueCls}">${formatDate(t.due_date)}</td>
+                    <td class="p-5 text-center text-xs font-black text-emerald-600">${t.finish_date ? formatFinishDate(t.finish_date) : '<span class="text-slate-300">—</span>'}</td>
                     <td class="p-5 text-center">
                         <span class="px-3 py-1 rounded-full text-[9px] font-black uppercase ${getStatusColor(t.status)}">${getStatusName(t.status)}</span>
                     </td>
@@ -398,8 +563,8 @@
                         ${t.status == 0 ? `<button onclick="doQuickStart('${t.id}')" class="bg-blue-500 text-white px-3 py-1 rounded-lg text-[10px] font-black shadow-lg">BẮT ĐẦU</button>` : ''}
                         ${t.status == 3 ? `<button onclick="doQuickDone('${t.id}')" class="bg-emerald-500 text-white px-3 py-1 rounded-lg text-[10px] font-black shadow-lg">XONG</button>` : (t.status == 5 ? '✅' : '')}
                     </td>
-                </tr>
-            `).join('');
+                </tr>`;
+            }).join('');
         }
 
         function applyTaskFilter() {
@@ -421,7 +586,7 @@
                 if (!tbody) { console.error('task-table-body not found'); return; }
                 tbody.innerHTML = filtered.length > 0
                     ? renderTaskRows(filtered)
-                    : '<tr><td colspan="6" class="p-8 text-center text-slate-400 text-sm font-bold">Không tìm thấy công việc nào phù hợp với bộ lọc</td></tr>';
+                    : '<tr><td colspan="7" class="p-8 text-center text-slate-400 text-sm font-bold">Không tìm thấy công việc nào phù hợp với bộ lọc</td></tr>';
 
                 // Đóng panel và scroll xuống bảng
                 const panel = document.getElementById('adv-filter-task');
@@ -488,7 +653,7 @@
                 const filtered = _applyFilter1001(ACTIVE_FILTER_1001);
                 tbody.innerHTML = filtered.length > 0
                     ? renderTaskRows(filtered)
-                    : '<tr><td colspan="6" class="p-8 text-center text-slate-400 text-sm font-bold">Không tìm thấy công việc nào phù hợp với bộ lọc</td></tr>';
+                    : '<tr><td colspan="7" class="p-8 text-center text-slate-400 text-sm font-bold">Không tìm thấy công việc nào phù hợp với bộ lọc</td></tr>';
             } else {
                 // Không có bộ lọc -> hiện mặc định
                 const defaultFiltered = ALL_TASKS.filter(t => t.user_id == SESSION.user.user_id && (t.status == 0 || t.status == 3));
@@ -564,7 +729,7 @@
                                 const chipCls = isOverdue
                                     ? 'bg-rose-100 text-rose-700 border border-rose-300'
                                     : 'bg-blue-100 text-blue-700';
-                                return `<div class="text-[8px] ${chipCls} p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal" onclick="openTaskForm(${JSON.stringify(t).replace(/"/g,'&quot;')})">(${t.project_code}) ${t.task_name}</div>`;
+                                return `<div class="text-[8px] ${chipCls} p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal" onclick="openTaskForm(${JSON.stringify(t).replace(/"/g,'&quot;')})">(${t.project_code}) ${t.task_name}<span class="opacity-60 font-normal"> – ${getUserName(t.user_id)}</span></div>`;
                             }).join('')}
                         </div>`;
                     }).join('')}
@@ -877,9 +1042,9 @@
             const isEdit = !!t;
             const html = `
                 <div id="task-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-3">
-                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden" style="max-height:96vh;display:flex;flex-direction:column;">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden" style="max-height:98vh;min-height:80vh;display:flex;flex-direction:column;">
                         <div class="px-5 py-3 bg-slate-900 text-white font-black flex justify-between uppercase tracking-widest flex-shrink-0"><span>Chi tiết công việc</span><button onclick="closeModal('task-modal')" class="text-xl leading-none">&times;</button></div>
-                        <form id="form-task" class="p-4 grid grid-cols-3 gap-x-4 gap-y-2 overflow-y-auto" style="flex:1;">
+                        <form id="form-task" class="p-6 grid grid-cols-3 gap-x-5 gap-y-3 overflow-y-auto" style="flex:1;align-content:start;">
                             <input type="hidden" name="id" value="${t?.id || ''}">
                             <div class="col-span-3">
                                 <label class="text-[10px] font-black uppercase text-slate-400">Tên công việc *</label>
@@ -1018,11 +1183,23 @@
                 if (currentMenuId === '10.01') refreshTable1001();
                 else if (currentMenuId === '10.02') renderCalendar();
                 // Gửi API ngầm — apiPayload.id rỗng với task mới => Apps Script tạo mới đúng
+                const tmpId = data.id; // lưu lại id tạm để cập nhật sau
                 fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: apiPayload }) })
                     .then(r => r.json())
                     .then(result => {
-                        TASKS_DIRTY = true;
-                        if (result.status !== 'success') console.warn('saveTask warning:', result.message);
+                        if (result.status === 'success') {
+                            // Cập nhật id thật từ server nếu là task mới
+                            if (isNewTask && result.id) {
+                                const idx = ALL_TASKS.findIndex(t => String(t.id) === String(tmpId));
+                                if (idx > -1) {
+                                    ALL_TASKS[idx].id = result.id;
+                                    syncTasksCache();
+                                }
+                            }
+                        } else {
+                            TASKS_DIRTY = true;
+                            console.warn('saveTask warning:', result.message);
+                        }
                     })
                     .catch(err => { TASKS_DIRTY = true; console.error('saveTask error:', err); });
             };
@@ -1042,17 +1219,29 @@
         }
 
         function doDeleteTask(id) {
+            // Chặn xóa task tạm chưa sync với server
+            if (String(id).startsWith('_tmp_')) {
+                alert('Công việc này vừa được tạo và chưa đồng bộ xong. Vui lòng chờ vài giây rồi thử lại.');
+                return;
+            }
             showConfirm("Xóa vĩnh viễn", "Bạn muốn xóa hẳn dòng công việc này?", () => {
-                // Xóa khỏi UI ngay lập tức
-                ALL_TASKS = ALL_TASKS.filter(t => t.id != id);
+                // Xóa khỏi UI ngay lập tức (so sánh String để tránh type mismatch)
+                ALL_TASKS = ALL_TASKS.filter(t => String(t.id) !== String(id));
                 closeModal('task-modal');
                 syncTasksCache();
                 refreshTable1001();
                 // Gửi API ngầm
-                fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteTask', data: { id } }) })
+                fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'deleteTask', data: { id: String(id) } }) })
                     .then(r => r.json())
-                    .then(result => { if (result.status !== 'success') { alert('Lỗi xóa: ' + (result.message || 'Không xác định')); TASKS_DIRTY = true; } })
-                    .catch(() => { alert('Lỗi kết nối khi xóa.'); TASKS_DIRTY = true; });
+                    .then(result => {
+                        if (result.status !== 'success') {
+                            // Rollback: tải lại data từ server
+                            TASKS_DIRTY = true;
+                            console.warn('Lỗi xóa từ server:', result.message);
+                            alert('Lỗi xóa: ' + (result.message || 'Không xác định') + '\nDữ liệu sẽ được tải lại.');
+                        }
+                    })
+                    .catch(() => { TASKS_DIRTY = true; alert('Lỗi kết nối khi xóa.'); });
             });
         }
 
@@ -1353,8 +1542,316 @@
             }
         }
         function initDateMasks() {
-            document.querySelectorAll('.date-mask').forEach(applyDateMask);
+            document.querySelectorAll('.date-mask').forEach(input => {
+                applyDateMask(input);
+                initDatePicker(input);
+            });
         }
+
+        // =============================================
+        // DATE PICKER - lịch popup cho ô nhập ngày
+        // =============================================
+        let _dpActive = null; // popup đang mở
+
+        function initDatePicker(input) {
+            // Tránh khởi tạo 2 lần
+            if (input._dpInit) return;
+            input._dpInit = true;
+
+            // Wrap input trong div.dp-wrapper (nếu chưa có)
+            let wrapper = input.closest('.dp-wrapper');
+            if (!wrapper) {
+                wrapper = document.createElement('div');
+                wrapper.className = 'dp-wrapper';
+                wrapper.style.position = 'relative';
+                input.parentNode.insertBefore(wrapper, input);
+                wrapper.appendChild(input);
+            }
+
+            // Nút icon lịch
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'dp-icon-btn';
+            btn.title = 'Chọn ngày từ lịch';
+            btn.innerHTML = '📅';
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dpToggle(input, wrapper);
+            });
+            wrapper.appendChild(btn);
+
+            // Click vào input cũng mở lịch
+            input.addEventListener('focus', () => {
+                if (!_dpActive || _dpActive.input !== input) {
+                    setTimeout(() => dpOpen(input, wrapper), 80);
+                }
+            });
+        }
+
+        function dpToggle(input, wrapper) {
+            if (_dpActive && _dpActive.input === input) {
+                dpClose();
+            } else {
+                dpOpen(input, wrapper);
+            }
+        }
+
+        function dpOpen(input, wrapper) {
+            dpClose(); // đóng popup cũ
+
+            // Parse ngày hiện tại trong input (DD/MM/YYYY)
+            let selDate = null;
+            const val = input.value.trim();
+            if (val && val.length === 10) {
+                const [dd, mm, yyyy] = val.split('/');
+                const d = new Date(+yyyy, +mm - 1, +dd);
+                if (!isNaN(d)) selDate = d;
+            }
+
+            const viewDate = selDate ? new Date(selDate) : new Date();
+            const state = { input, wrapper, viewDate, selDate, view: 'days' }; // view: 'days'|'months'|'years'
+
+            const popup = document.createElement('div');
+            popup.className = 'dp-popup';
+            // Căn lề phải nếu gần cạnh phải màn hình
+            const rect = wrapper.getBoundingClientRect();
+            if (rect.left + 290 > window.innerWidth) popup.classList.add('dp-align-right');
+
+            state.popup = popup;
+            wrapper.appendChild(popup);
+            _dpActive = state;
+
+            dpRender(state);
+
+            // Đóng khi click ngoài
+            setTimeout(() => {
+                document.addEventListener('mousedown', dpOutsideHandler, { capture: true });
+            }, 0);
+        }
+
+        function dpOutsideHandler(e) {
+            if (!_dpActive) return;
+            if (_dpActive.popup && !_dpActive.popup.contains(e.target) && !_dpActive.wrapper.contains(e.target)) {
+                dpClose();
+            }
+        }
+
+        function dpClose() {
+            if (!_dpActive) return;
+            if (_dpActive.popup && _dpActive.popup.parentNode) _dpActive.popup.parentNode.removeChild(_dpActive.popup);
+            document.removeEventListener('mousedown', dpOutsideHandler, { capture: true });
+            _dpActive = null;
+        }
+
+        function dpRender(state) {
+            const { popup, viewDate, selDate, view } = state;
+            popup.innerHTML = '';
+
+            if (view === 'months') { dpRenderMonths(state); return; }
+            if (view === 'years')  { dpRenderYears(state);  return; }
+
+            const year  = viewDate.getFullYear();
+            const month = viewDate.getMonth();
+
+            const VI_MONTHS = ['Tháng 1','Tháng 2','Tháng 3','Tháng 4','Tháng 5','Tháng 6','Tháng 7','Tháng 8','Tháng 9','Tháng 10','Tháng 11','Tháng 12'];
+            const VI_WD     = ['CN','T2','T3','T4','T5','T6','T7'];
+
+            const firstDay   = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const today = new Date(); today.setHours(0,0,0,0);
+
+            // Header
+            const hdr = document.createElement('div');
+            hdr.className = 'dp-header';
+
+            const prevBtn = document.createElement('button');
+            prevBtn.type = 'button';
+            prevBtn.className = 'dp-nav-btn';
+            prevBtn.innerHTML = '‹';
+            prevBtn.addEventListener('mousedown', e => { e.preventDefault(); state.viewDate = new Date(year, month - 1, 1); dpRender(state); });
+
+            const titleBtn = document.createElement('div');
+            titleBtn.className = 'dp-month-year';
+            titleBtn.textContent = `${VI_MONTHS[month]} ${year}`;
+            titleBtn.addEventListener('mousedown', e => { e.preventDefault(); state.view = 'months'; dpRender(state); });
+
+            const nextBtn = document.createElement('button');
+            nextBtn.type = 'button';
+            nextBtn.className = 'dp-nav-btn';
+            nextBtn.innerHTML = '›';
+            nextBtn.addEventListener('mousedown', e => { e.preventDefault(); state.viewDate = new Date(year, month + 1, 1); dpRender(state); });
+
+            hdr.appendChild(prevBtn); hdr.appendChild(titleBtn); hdr.appendChild(nextBtn);
+            popup.appendChild(hdr);
+
+            // Weekday headers
+            const wdRow = document.createElement('div');
+            wdRow.className = 'dp-weekdays';
+            VI_WD.forEach(d => {
+                const wd = document.createElement('div');
+                wd.className = 'dp-wd';
+                wd.textContent = d;
+                wdRow.appendChild(wd);
+            });
+            popup.appendChild(wdRow);
+
+            // Days grid
+            const grid = document.createElement('div');
+            grid.className = 'dp-days';
+
+            for (let i = 0; i < firstDay; i++) {
+                const em = document.createElement('div');
+                em.className = 'dp-day dp-empty';
+                grid.appendChild(em);
+            }
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const cell = document.createElement('div');
+                cell.className = 'dp-day';
+                cell.textContent = d;
+
+                const cellDate = new Date(year, month, d);
+                cellDate.setHours(0,0,0,0);
+                if (cellDate.getTime() === today.getTime()) cell.classList.add('dp-today');
+                if (selDate && cellDate.getTime() === new Date(selDate.getFullYear(), selDate.getMonth(), selDate.getDate()).getTime())
+                    cell.classList.add('dp-selected');
+
+                cell.addEventListener('mousedown', e => {
+                    e.preventDefault();
+                    const chosen = new Date(year, month, d);
+                    const dd = String(d).padStart(2,'0');
+                    const mm = String(month + 1).padStart(2,'0');
+                    state.input.value = `${dd}/${mm}/${year}`;
+                    state.input.dispatchEvent(new Event('input', { bubbles: true }));
+                    state.input.dispatchEvent(new Event('change', { bubbles: true }));
+                    dpClose();
+                });
+
+                grid.appendChild(cell);
+            }
+            popup.appendChild(grid);
+
+            // Footer
+            const footer = document.createElement('div');
+            footer.className = 'dp-footer';
+
+            const todayBtn = document.createElement('button');
+            todayBtn.type = 'button';
+            todayBtn.className = 'dp-today-btn';
+            todayBtn.textContent = 'Hôm nay';
+            todayBtn.addEventListener('mousedown', e => {
+                e.preventDefault();
+                const now = new Date();
+                const dd = String(now.getDate()).padStart(2,'0');
+                const mm = String(now.getMonth()+1).padStart(2,'0');
+                state.input.value = `${dd}/${mm}/${now.getFullYear()}`;
+                state.input.dispatchEvent(new Event('input', { bubbles: true }));
+                dpClose();
+            });
+
+            const clearBtn = document.createElement('button');
+            clearBtn.type = 'button';
+            clearBtn.className = 'dp-clear-btn';
+            clearBtn.textContent = 'Xoá';
+            clearBtn.addEventListener('mousedown', e => {
+                e.preventDefault();
+                state.input.value = '';
+                state.input.dispatchEvent(new Event('input', { bubbles: true }));
+                dpClose();
+            });
+
+            footer.appendChild(todayBtn);
+            footer.appendChild(clearBtn);
+            popup.appendChild(footer);
+        }
+
+        function dpRenderMonths(state) {
+            const { popup, viewDate } = state;
+            const year = viewDate.getFullYear();
+            const VI_MONTHS_SHORT = ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'];
+
+            const hdr = document.createElement('div');
+            hdr.className = 'dp-header';
+
+            const prevY = document.createElement('button');
+            prevY.type = 'button'; prevY.className = 'dp-nav-btn'; prevY.innerHTML = '‹';
+            prevY.addEventListener('mousedown', e => { e.preventDefault(); state.viewDate = new Date(year - 1, viewDate.getMonth(), 1); dpRender(state); });
+
+            const titleBtn = document.createElement('div');
+            titleBtn.className = 'dp-month-year';
+            titleBtn.textContent = year;
+            titleBtn.addEventListener('mousedown', e => { e.preventDefault(); state.view = 'years'; dpRender(state); });
+
+            const nextY = document.createElement('button');
+            nextY.type = 'button'; nextY.className = 'dp-nav-btn'; nextY.innerHTML = '›';
+            nextY.addEventListener('mousedown', e => { e.preventDefault(); state.viewDate = new Date(year + 1, viewDate.getMonth(), 1); dpRender(state); });
+
+            hdr.appendChild(prevY); hdr.appendChild(titleBtn); hdr.appendChild(nextY);
+            popup.appendChild(hdr);
+
+            const grid = document.createElement('div');
+            grid.className = 'dp-my-grid';
+
+            VI_MONTHS_SHORT.forEach((m, idx) => {
+                const item = document.createElement('div');
+                item.className = 'dp-my-item';
+                if (idx === viewDate.getMonth()) item.classList.add('dp-my-selected');
+                item.textContent = m;
+                item.addEventListener('mousedown', e => {
+                    e.preventDefault();
+                    state.viewDate = new Date(year, idx, 1);
+                    state.view = 'days';
+                    dpRender(state);
+                });
+                grid.appendChild(item);
+            });
+            popup.appendChild(grid);
+        }
+
+        function dpRenderYears(state) {
+            const { popup, viewDate } = state;
+            const baseYear = Math.floor(viewDate.getFullYear() / 12) * 12;
+
+            const hdr = document.createElement('div');
+            hdr.className = 'dp-header';
+
+            const prevB = document.createElement('button');
+            prevB.type = 'button'; prevB.className = 'dp-nav-btn'; prevB.innerHTML = '‹';
+            prevB.addEventListener('mousedown', e => { e.preventDefault(); state.viewDate = new Date(baseYear - 12, viewDate.getMonth(), 1); dpRender(state); });
+
+            const titleDiv = document.createElement('div');
+            titleDiv.className = 'dp-month-year';
+            titleDiv.style.cursor = 'default';
+            titleDiv.textContent = `${baseYear} – ${baseYear + 11}`;
+
+            const nextB = document.createElement('button');
+            nextB.type = 'button'; nextB.className = 'dp-nav-btn'; nextB.innerHTML = '›';
+            nextB.addEventListener('mousedown', e => { e.preventDefault(); state.viewDate = new Date(baseYear + 12, viewDate.getMonth(), 1); dpRender(state); });
+
+            hdr.appendChild(prevB); hdr.appendChild(titleDiv); hdr.appendChild(nextB);
+            popup.appendChild(hdr);
+
+            const grid = document.createElement('div');
+            grid.className = 'dp-my-grid';
+
+            for (let y = baseYear; y < baseYear + 12; y++) {
+                const item = document.createElement('div');
+                item.className = 'dp-my-item';
+                if (y === viewDate.getFullYear()) item.classList.add('dp-my-selected');
+                item.textContent = y;
+                item.addEventListener('mousedown', e => {
+                    e.preventDefault();
+                    state.viewDate = new Date(y, viewDate.getMonth(), 1);
+                    state.view = 'months';
+                    dpRender(state);
+                });
+                grid.appendChild(item);
+            }
+            popup.appendChild(grid);
+        }
+
+        window.dpToggle = dpToggle;
+        window.dpClose  = dpClose;
 
         // Tự động nhảy Người nhận thông báo khi Người thực hiện thay đổi
         function onTaskUserChange() {
@@ -1422,6 +1919,17 @@
         function formatDate(d) {
             if (!d) return '-';
             const date = parseLocalDate(d);
+            return `${date.getDate().toString().padStart(2,'0')}/${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getFullYear()}`;
+        }
+        // finish_date thường là chuỗi "DD/MM/YYYY HH:MM:SS" hoặc ISO
+        function formatFinishDate(d) {
+            if (!d) return '';
+            const s = String(d).trim();
+            // Dạng "DD/MM/YYYY ..." — lấy phần ngày trước khoảng trắng
+            if (s.match(/^\d{1,2}\/\d{1,2}\/\d{4}/)) return s.slice(0, 10);
+            // Dạng ISO
+            const date = parseLocalDate(s);
+            if (!date || isNaN(date)) return s.slice(0, 10);
             return `${date.getDate().toString().padStart(2,'0')}/${(date.getMonth()+1).toString().padStart(2,'0')}/${date.getFullYear()}`;
         }
         function getUserName(id) { return MASTER_DATA.users.find(u => u.user_id == id)?.username || 'N/A'; }
