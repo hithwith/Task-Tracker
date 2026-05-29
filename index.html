@@ -104,6 +104,56 @@
         }
         .dp-my-item:hover { background: #eff6ff; color: #2563eb; }
         .dp-my-item.dp-my-selected { background: #2563eb; color: #fff; }
+        /* Toggle switch peer styles */
+        input[type="checkbox"].sr-only:checked ~ div.peer-checked\:bg-blue-600 { background-color: #2563eb; }
+        input[type="checkbox"].sr-only:checked ~ div + div.peer-checked\:translate-x-5 { transform: translateX(1.25rem); }
+        /* Peer selector workaround for Tailwind CDN */
+        .toggle-track { width:2.75rem; height:1.5rem; background:#e2e8f0; border-radius:9999px; position:relative; transition:background .2s; }
+        .toggle-thumb { position:absolute; top:2px; left:2px; width:1.25rem; height:1.25rem; background:#fff; border-radius:9999px; box-shadow:0 1px 3px rgba(0,0,0,.2); transition:transform .2s; }
+        input[type="checkbox"].toggle-cb:checked + .toggle-track { background:#2563eb; }
+        input[type="checkbox"].toggle-cb:checked + .toggle-track .toggle-thumb { transform:translateX(1.25rem); }
+
+        /* ===== BIRTHDAY MODAL ===== */
+        #birthday-modal {
+            z-index: 9999;
+            animation: bdFadeIn 0.4s ease;
+        }
+        @keyframes bdFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .birthday-card {
+            animation: bdSlideUp 0.45s cubic-bezier(.22,1,.36,1);
+        }
+        @keyframes bdSlideUp {
+            from { opacity: 0; transform: translateY(40px) scale(0.95); }
+            to { opacity: 1; transform: none; }
+        }
+        .confetti-emoji {
+            position: absolute;
+            font-size: 1.5rem;
+            animation: confettiFall linear infinite;
+            pointer-events: none;
+        }
+        @keyframes confettiFall {
+            0%   { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(340px) rotate(360deg); opacity: 0; }
+        }
+        .bd-name-tag {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .bd-avatar {
+            width: 72px; height: 72px; border-radius: 50%;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2rem; font-weight: 900; color: #fff;
+            border: 4px solid #fbbf24;
+            box-shadow: 0 0 0 4px rgba(251,191,36,0.25);
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body class="bg-gray-100 font-sans text-gray-800">
@@ -139,6 +189,10 @@
             <header class="bg-white shadow-sm p-5 border-b flex justify-between items-center">
                 <h2 id="page-title" class="text-xl font-extrabold text-slate-700 uppercase tracking-tight"></h2>
                 <div class="flex items-center gap-3">
+                    <button id="birthday-bell-btn" onclick="openBirthdayFromHeader()" class="hidden relative w-10 h-10 rounded-xl bg-slate-50 hover:bg-pink-50 border border-slate-200 flex items-center justify-center transition" title="Sinh nhật hôm nay">
+                        <span class="text-xl">🎂</span>
+                        <span id="birthday-badge" class="absolute -top-1 -right-1 bg-pink-500 text-white text-[10px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">0</span>
+                    </button>
                     <button id="notif-bell-btn" onclick="showDeadlinePanel()" class="relative w-10 h-10 rounded-xl bg-slate-50 hover:bg-amber-50 border border-slate-200 flex items-center justify-center transition" title="Thông báo deadline hôm nay">
                         <span class="text-xl">🔔</span>
                         <span id="notif-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">0</span>
@@ -329,6 +383,8 @@
                 TASKS_DIRTY = false;
                 renderTable1001();
                 checkAndNotifyDeadline();
+                // KHÔNG gọi checkAndNotifyBirthday() ở đây vì MASTER_DATA từ cache
+                // có thể chưa có users đầy đủ. Để getInitialData xong mới gọi.
             } else {
                 // Chưa có cache -> hiện skeleton
                 document.getElementById('main-content').innerHTML = `
@@ -353,6 +409,7 @@
                 .then(md => {
                     MASTER_DATA = md;
                     try { localStorage.setItem(cacheKeyMD, JSON.stringify(md)); } catch(e) {}
+                    checkAndNotifyBirthday();
                 })
                 .catch(e => console.error('Lỗi getInitialData:', e));
 
@@ -822,11 +879,11 @@
                     <td class="p-3 font-medium text-slate-800 text-xs">${t.task_name}</td>
                     <td class="p-3 text-xs text-slate-500">${getUserName(t.user_id)}</td>
                     <td class="p-3 text-center text-xs font-black">${formatDate(t.due_date)}</td>
-                    <td class="p-3 text-center"><span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${getStatusColor(t.status)}">${getStatusName(t.status)}</span></td>
+                    <td class="p-3 text-center" style="min-width:130px"><span class="px-3 py-1 rounded-full text-[9px] font-black uppercase whitespace-nowrap ${getStatusColor(t.status)}">${getStatusName(t.status)}</span></td>
                 </tr>`;
 
             const tableHead = `<thead class="bg-slate-50 border-b"><tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <th class="p-3">Dự án</th><th class="p-3">Tên công việc</th><th class="p-3">Người thực hiện</th><th class="p-3 text-center">Ngày đến hạn</th><th class="p-3 text-center">Trạng thái</th>
+                <th class="p-3">Dự án</th><th class="p-3">Tên công việc</th><th class="p-3">Người thực hiện</th><th class="p-3 text-center">Ngày đến hạn</th><th class="p-3 text-center" style="min-width:130px">Trạng thái</th>
             </tr></thead>`;
 
             container.innerHTML = `
@@ -1098,6 +1155,15 @@
                                     </div>
                                 </div>
                             </div>
+                            <div class="col-span-3">
+                                <label class="flex items-center gap-3 cursor-pointer select-none group" onclick="event.preventDefault(); const cb=document.getElementById('cb_repeat_yn'); cb.checked=!cb.checked; const tr=document.getElementById('toggle_repeat_track'); const th=document.getElementById('toggle_repeat_thumb'); if(cb.checked){tr.style.background='#2563eb';th.style.transform='translateX(1.25rem)';}else{tr.style.background='#e2e8f0';th.style.transform='none';}">
+                                    <input type="checkbox" name="repeat_yn" id="cb_repeat_yn" value="1" ${t?.repeat_yn == 1 ? 'checked' : ''} class="sr-only">
+                                    <div id="toggle_repeat_track" class="toggle-track" style="background:${t?.repeat_yn == 1 ? '#2563eb' : '#e2e8f0'}">
+                                        <div id="toggle_repeat_thumb" class="toggle-thumb" style="transform:${t?.repeat_yn == 1 ? 'translateX(1.25rem)' : 'none'}"></div>
+                                    </div>
+                                    <span class="text-sm font-bold text-slate-600 group-hover:text-blue-600 transition-colors">🔁 Lặp lại hằng tuần</span>
+                                </label>
+                            </div>
                             <div class="col-span-3 flex justify-between border-t pt-3 mt-1 pb-1">
                                 ${isEdit ? `<button type="button" onclick="doDeleteTask('${t.id}')" class="px-5 py-2 bg-red-100 text-red-600 rounded-xl font-bold text-sm">XÓA DÒNG</button>` : '<div></div>'}
                                 <div class="flex gap-3"><button type="button" onclick="closeModal('task-modal')" class="px-6 py-2 bg-gray-100 rounded-xl font-bold text-sm">HỦY</button><button type="submit" class="px-8 py-2 bg-blue-600 text-white rounded-xl font-black shadow-lg shadow-blue-200 text-sm">LƯU THÔNG TIN</button></div>
@@ -1137,6 +1203,8 @@
                 // Thu thập noti_user từ các checkbox
                 const notiChecked = Array.from(document.querySelectorAll('.noti-user-cb:checked')).map(cb => cb.value);
                 data.noti_user = notiChecked.join(',');
+                // Thu thập repeat_yn (checkbox toggle)
+                data.repeat_yn = document.getElementById('cb_repeat_yn')?.checked ? 1 : 0;
                 const isNewTask = !data.id;
                 const _now = new Date();
                 const nowIso = `${_now.getDate().toString().padStart(2,'0')}/${(_now.getMonth()+1).toString().padStart(2,'0')}/${_now.getFullYear()} ${_now.getHours()}:${_now.getMinutes().toString().padStart(2,'0')}:${_now.getSeconds().toString().padStart(2,'0')}`;
@@ -1194,6 +1262,51 @@
                                 if (idx > -1) {
                                     ALL_TASKS[idx].id = result.id;
                                     syncTasksCache();
+                                }
+                            }
+                            // Nếu task có repeat_yn=1 và vừa đánh dấu hoàn thành (status=5), tạo task mới tuần kế tiếp
+                            if (parseInt(apiPayload.repeat_yn) === 1 && String(apiPayload.status) === '5') {
+                                const addWeeks = (dateStr, weeks) => {
+                                    const d = parseLocalDate(dateStr);
+                                    if (!d) return null;
+                                    d.setDate(d.getDate() + weeks * 7);
+                                    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                                };
+                                const nextStart = addWeeks(apiPayload.start_date, 1);
+                                const nextDue   = addWeeks(apiPayload.due_date, 1);
+                                if (nextStart && nextDue) {
+                                    const _nw = new Date();
+                                    const _nwStr = `${_nw.getDate().toString().padStart(2,'0')}/${(_nw.getMonth()+1).toString().padStart(2,'0')}/${_nw.getFullYear()} ${_nw.getHours()}:${_nw.getMinutes().toString().padStart(2,'0')}:${_nw.getSeconds().toString().padStart(2,'0')}`;
+                                    const repeatPayload = {
+                                        task_name: apiPayload.task_name,
+                                        description: apiPayload.description || '',
+                                        project_code: apiPayload.project_code,
+                                        user_id: apiPayload.user_id,
+                                        priority: apiPayload.priority,
+                                        start_date: nextStart,
+                                        due_date: nextDue,
+                                        status: 0,
+                                        noti_user: apiPayload.noti_user || '',
+                                        repeat_yn: 1,
+                                        unit_id: apiPayload.unit_id,
+                                        user_id0: SESSION.user.user_id,
+                                        user_id2: SESSION.user.user_id,
+                                        datetime0: _nwStr,
+                                        datetime2: _nwStr
+                                    };
+                                    const tmpRepeatId = '_tmp_repeat_' + Date.now();
+                                    ALL_TASKS.push({ ...repeatPayload, id: tmpRepeatId });
+                                    syncTasksCache();
+                                    if (currentMenuId === '10.01') refreshTable1001();
+                                    else if (currentMenuId === '10.02') renderCalendar();
+                                    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: repeatPayload }) })
+                                        .then(r => r.json())
+                                        .then(res2 => {
+                                            if (res2.status === 'success' && res2.id) {
+                                                const ri = ALL_TASKS.findIndex(t => String(t.id) === tmpRepeatId);
+                                                if (ri > -1) { ALL_TASKS[ri].id = res2.id; syncTasksCache(); }
+                                            }
+                                        }).catch(console.error);
                                 }
                             }
                         } else {
@@ -1310,7 +1423,54 @@
                 if (duration !== null) payload.duration = duration;
                 if (act_time !== null) payload.act_time = act_time;
                 fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: payload }) })
-                    .then(() => { TASKS_DIRTY = true; })
+                    .then(() => {
+                        TASKS_DIRTY = true;
+                        // Nếu task có repeat_yn=1, tạo task mới tuần kế tiếp
+                        if (task && parseInt(task.repeat_yn) === 1) {
+                            const addWeeks = (dateStr, weeks) => {
+                                if (!dateStr) return null;
+                                const d = parseLocalDate(dateStr);
+                                if (!d) return null;
+                                d.setDate(d.getDate() + weeks * 7);
+                                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                            };
+                            const nextStart = addWeeks(task.start_date, 1);
+                            const nextDue   = addWeeks(task.due_date, 1);
+                            if (nextStart && nextDue) {
+                                const _nr = new Date();
+                                const _nrStr = `${_nr.getDate().toString().padStart(2,'0')}/${(_nr.getMonth()+1).toString().padStart(2,'0')}/${_nr.getFullYear()} ${_nr.getHours()}:${_nr.getMinutes().toString().padStart(2,'0')}:${_nr.getSeconds().toString().padStart(2,'0')}`;
+                                const repeatPayload = {
+                                    task_name: task.task_name,
+                                    description: task.description || '',
+                                    project_code: task.project_code,
+                                    user_id: task.user_id,
+                                    priority: task.priority,
+                                    start_date: nextStart,
+                                    due_date: nextDue,
+                                    status: 0,
+                                    noti_user: task.noti_user || '',
+                                    repeat_yn: 1,
+                                    unit_id: task.unit_id || SESSION.unit.unit_id,
+                                    user_id0: SESSION.user.user_id,
+                                    user_id2: SESSION.user.user_id,
+                                    datetime0: _nrStr,
+                                    datetime2: _nrStr
+                                };
+                                const tmpRepId = '_tmp_repeat_' + Date.now();
+                                ALL_TASKS.push({ ...repeatPayload, id: tmpRepId });
+                                syncTasksCache();
+                                if (currentMenuId === '10.01') refreshTable1001();
+                                fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: repeatPayload }) })
+                                    .then(r => r.json())
+                                    .then(res2 => {
+                                        if (res2.status === 'success' && res2.id) {
+                                            const ri = ALL_TASKS.findIndex(t => String(t.id) === tmpRepId);
+                                            if (ri > -1) { ALL_TASKS[ri].id = res2.id; syncTasksCache(); }
+                                        }
+                                    }).catch(console.error);
+                            }
+                        }
+                    })
                     .catch(() => { TASKS_DIRTY = true; });
             });
         }
@@ -2090,7 +2250,7 @@
 
             container.innerHTML = `
                 <div class="bg-white p-6 rounded-2xl shadow-sm border mb-6">
-                    <div class="flex flex-wrap gap-4 items-end mb-6">
+                    <div class="flex flex-wrap gap-4 items-end mb-4">
                         <div class="space-y-1">
                             <label class="text-[10px] font-black uppercase text-slate-400">Từ ngày</label>
                             <input type="text" id="rpt0502_from" class="date-mask p-2.5 border-2 rounded-xl text-sm w-36 outline-none focus:border-blue-400" placeholder="DD/MM/YYYY" maxlength="10" value="${defaultFrom}">
@@ -2099,80 +2259,246 @@
                             <label class="text-[10px] font-black uppercase text-slate-400">Đến ngày</label>
                             <input type="text" id="rpt0502_to" class="date-mask p-2.5 border-2 rounded-xl text-sm w-36 outline-none focus:border-blue-400" placeholder="DD/MM/YYYY" maxlength="10" value="${defaultTo}">
                         </div>
-                        <button onclick="applyReport100502()" class="px-6 py-2.5 bg-slate-800 text-white rounded-xl font-bold text-sm">XEM BÁO CÁO</button>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black uppercase text-slate-400">Xem theo</label>
+                            <div class="flex gap-1 border-2 rounded-xl overflow-hidden" style="height:42px">
+                                <button id="rpt0502_grp_project" onclick="setReport100502Group('project')"
+                                    class="px-4 text-sm font-bold transition bg-slate-800 text-white">1. Dự án</button>
+                                <button id="rpt0502_grp_user" onclick="setReport100502Group('user')"
+                                    class="px-4 text-sm font-bold transition bg-white text-slate-600 hover:bg-slate-50">2. Người thực hiện</button>
+                            </div>
+                        </div>
+                        <div class="flex gap-2 items-end">
+                            <button onclick="applyReport100502()" class="px-6 py-2.5 bg-slate-800 text-white rounded-xl font-bold text-sm">XEM BÁO CÁO</button>
+                            <button onclick="exportReport100502Excel()" class="px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm">📥 Xuất Excel</button>
+                        </div>
                     </div>
-                    <div id="rpt0502_table_area">${buildReport100502Table(defaultFrom, defaultTo)}</div>
+                    <div id="rpt0502_table_area">${buildReport100502Table(defaultFrom, defaultTo, 'project')}</div>
                 </div>`;
             initDateMasks();
         }
 
-        function getReport100502Data(fromStr, toStr) {
+        // Trạng thái nhóm hiện tại
+        let _rpt0502Group = 'project'; // 'project' | 'user'
+        function setReport100502Group(mode) {
+            _rpt0502Group = mode;
+            const btnP = document.getElementById('rpt0502_grp_project');
+            const btnU = document.getElementById('rpt0502_grp_user');
+            if (btnP && btnU) {
+                if (mode === 'project') {
+                    btnP.className = 'px-4 text-sm font-bold transition bg-slate-800 text-white';
+                    btnU.className = 'px-4 text-sm font-bold transition bg-white text-slate-600 hover:bg-slate-50';
+                } else {
+                    btnU.className = 'px-4 text-sm font-bold transition bg-slate-800 text-white';
+                    btnP.className = 'px-4 text-sm font-bold transition bg-white text-slate-600 hover:bg-slate-50';
+                }
+            }
+            applyReport100502();
+        }
+
+        // Lấy tất cả task trong khoảng ngày (không lọc status) để tính trượt/dời deadline
+        function getReport100502AllTasks(fromStr, toStr) {
             const fromDate = parseLocalDate(fromStr);
             const toDate   = parseLocalDate(toStr);
-            const filtered = ALL_TASKS.filter(t => {
-                if (t.status != 5) return false;
-                if (!t.finish_date) return false;
-                const fd = parseDatetime0(t.finish_date);
-                if (!fd) return false;
-                const fdDate = new Date(fd.getFullYear(), fd.getMonth(), fd.getDate());
-                if (fromDate && fdDate < fromDate) return false;
-                if (toDate   && fdDate > toDate)   return false;
-                return true;
-            });
-            const grouped = {};
-            filtered.forEach(t => {
-                const fd = parseDatetime0(t.finish_date);
-                const dayKey = fd.getFullYear() + '-' + (fd.getMonth()+1).toString().padStart(2,'0') + '-' + fd.getDate().toString().padStart(2,'0');
-                const key = t.user_id + '__' + dayKey;
-                if (!grouped[key]) grouped[key] = { user_id: t.user_id, dayKey, tasks: [] };
-                grouped[key].tasks.push(t);
-            });
-            return Object.values(grouped).sort((a,b) => {
-                const ua = getUserName(a.user_id), ub = getUserName(b.user_id);
-                if (ua < ub) return -1; if (ua > ub) return 1;
-                return a.dayKey.localeCompare(b.dayKey);
+            // Task có finish_date trong khoảng (bao gồm task hoàn thành)
+            // HOẶC task chưa hoàn thành nhưng có due_date trong khoảng
+            return ALL_TASKS.filter(t => {
+                if (t.finish_date) {
+                    const fd = parseDatetime0(t.finish_date);
+                    if (fd) {
+                        const fdDate = new Date(fd.getFullYear(), fd.getMonth(), fd.getDate());
+                        if ((!fromDate || fdDate >= fromDate) && (!toDate || fdDate <= toDate)) return true;
+                    }
+                }
+                if (t.due_date) {
+                    const dd = parseLocalDate(t.due_date);
+                    if (dd && (!fromDate || dd >= fromDate) && (!toDate || dd <= toDate)) return true;
+                }
+                return false;
             });
         }
 
-        function buildReport100502Table(fromStr, toStr) {
-            const rows = getReport100502Data(fromStr, toStr);
-            if (!rows.length) {
+        function calcTaskStats(tasks) {
+            // Số task hoàn thành (status=5)
+            const done = tasks.filter(t => t.status == 5).length;
+            // Số task trượt deadline: finish_date > due_date
+            const missDeadline = tasks.filter(t => {
+                if (!t.finish_date || !t.due_date) return false;
+                const fd = parseDatetime0(t.finish_date);
+                const dd = parseLocalDate(t.due_date);
+                if (!fd || !dd) return false;
+                const fdDay = new Date(fd.getFullYear(), fd.getMonth(), fd.getDate());
+                return fdDay > dd;
+            }).length;
+            // Số task dời deadline: có tồn tại giá trị old_due_date
+            const extDeadline = tasks.filter(t => t.old_due_date && String(t.old_due_date).trim() !== '').length;
+            // Tổng giờ act_time
+            const hours = tasks.reduce((s,t) => s + (parseFloat(t.act_time)||0), 0) / 3600;
+            return { total: tasks.length, done, missDeadline, extDeadline, hours };
+        }
+
+        function buildReport100502Table(fromStr, toStr, groupMode) {
+            groupMode = groupMode || _rpt0502Group || 'project';
+            const allTasks = getReport100502AllTasks(fromStr, toStr);
+            if (!allTasks.length) {
                 return '<div class="text-center py-12 text-slate-400 text-sm">Không có dữ liệu trong khoảng thời gian này.</div>';
             }
-            let tableBody = '';
-            rows.forEach(r => {
-                const dayHours = r.tasks.reduce((s,t) => s + (parseFloat(t.act_time)||0), 0);
-                const [fy, fm, fd2] = r.dayKey.split('-');
-                const dayDisplay = fd2 + '/' + fm + '/' + fy;
-                tableBody += '<tr class="border-b hover:bg-slate-50">'
-                    + '<td class="p-3 text-sm font-bold text-slate-700">' + getUserName(r.user_id) + '</td>'
-                    + '<td class="p-3 text-sm text-slate-600 text-center">' + dayDisplay + '</td>'
-                    + '<td class="p-3 text-sm text-center font-bold text-emerald-700">' + (dayHours/3600).toFixed(2) + '</td></tr>';
-            });
-            return '<div class="rounded-xl border overflow-hidden">'
-                + '<table class="w-full text-left">'
-                + '<thead class="bg-slate-50 border-b"><tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">'
-                + '<th class="p-3">Người thực hiện</th><th class="p-3 text-center">Ngày</th><th class="p-3 text-center">Tổng thời gian (giờ)</th></tr></thead>'
-                + '<tbody class="divide-y">' + tableBody + '</tbody>'
+
+            // Header chung
+            const theadHtml = '<thead class="bg-slate-800 text-white">'
+                + '<tr class="text-[10px] font-black uppercase tracking-widest">'
+                + '<th class="p-3 text-left" style="min-width:160px">Nhóm / Chi tiết</th>'
+                + '<th class="p-3 text-center" style="min-width:80px">Tổng CV</th>'
+                + '<th class="p-3 text-center" style="min-width:90px">Hoàn thành</th>'
+                + '<th class="p-3 text-center" style="min-width:110px">Trượt deadline</th>'
+                + '<th class="p-3 text-center" style="min-width:110px">Dời deadline</th>'
+                + '<th class="p-3 text-center" style="min-width:110px">Tổng giờ (h)</th>'
+                + '</tr></thead>';
+
+            let tbody = '';
+
+            if (groupMode === 'project') {
+                // Nhóm theo Dự án, chi tiết theo Người thực hiện
+                const byProject = {};
+                allTasks.forEach(t => {
+                    const pcode = t.project_code || '(Không có dự án)';
+                    if (!byProject[pcode]) byProject[pcode] = [];
+                    byProject[pcode].push(t);
+                });
+                const projectKeys = Object.keys(byProject).sort();
+                projectKeys.forEach(pcode => {
+                    const pTasks = byProject[pcode];
+                    const ps = calcTaskStats(pTasks);
+                    // Dòng tổng theo Dự án
+                    tbody += '<tr class="bg-blue-50 border-b-2 border-blue-200 font-black">'
+                        + '<td class="p-3 text-blue-800 text-sm">📁 ' + pcode + '</td>'
+                        + '<td class="p-3 text-center text-sm text-slate-800">' + ps.total + '</td>'
+                        + '<td class="p-3 text-center text-sm text-emerald-700">' + ps.done + '</td>'
+                        + '<td class="p-3 text-center text-sm text-rose-600">' + ps.missDeadline + '</td>'
+                        + '<td class="p-3 text-center text-sm text-amber-600">' + ps.extDeadline + '</td>'
+                        + '<td class="p-3 text-center text-sm text-blue-700">' + ps.hours.toFixed(2) + '</td>'
+                        + '</tr>';
+                    // Chi tiết theo Người thực hiện
+                    const byUser = {};
+                    pTasks.forEach(t => {
+                        const uid = t.user_id;
+                        if (!byUser[uid]) byUser[uid] = [];
+                        byUser[uid].push(t);
+                    });
+                    Object.keys(byUser).sort((a,b) => getUserName(a).localeCompare(getUserName(b))).forEach(uid => {
+                        const uTasks = byUser[uid];
+                        const us = calcTaskStats(uTasks);
+                        tbody += '<tr class="border-b hover:bg-slate-50">'
+                            + '<td class="p-3 text-xs text-slate-600 pl-8">👤 ' + getUserName(uid) + '</td>'
+                            + '<td class="p-3 text-center text-xs text-slate-700">' + us.total + '</td>'
+                            + '<td class="p-3 text-center text-xs text-emerald-600">' + us.done + '</td>'
+                            + '<td class="p-3 text-center text-xs text-rose-500">' + us.missDeadline + '</td>'
+                            + '<td class="p-3 text-center text-xs text-amber-500">' + us.extDeadline + '</td>'
+                            + '<td class="p-3 text-center text-xs text-blue-600">' + us.hours.toFixed(2) + '</td>'
+                            + '</tr>';
+                    });
+                });
+            } else {
+                // Nhóm theo Người thực hiện, chi tiết theo Dự án
+                const byUser = {};
+                allTasks.forEach(t => {
+                    const uid = t.user_id;
+                    if (!byUser[uid]) byUser[uid] = [];
+                    byUser[uid].push(t);
+                });
+                Object.keys(byUser).sort((a,b) => getUserName(a).localeCompare(getUserName(b))).forEach(uid => {
+                    const uTasks = byUser[uid];
+                    const us = calcTaskStats(uTasks);
+                    // Dòng tổng theo Người thực hiện
+                    tbody += '<tr class="bg-emerald-50 border-b-2 border-emerald-200 font-black">'
+                        + '<td class="p-3 text-emerald-800 text-sm">👤 ' + getUserName(uid) + '</td>'
+                        + '<td class="p-3 text-center text-sm text-slate-800">' + us.total + '</td>'
+                        + '<td class="p-3 text-center text-sm text-emerald-700">' + us.done + '</td>'
+                        + '<td class="p-3 text-center text-sm text-rose-600">' + us.missDeadline + '</td>'
+                        + '<td class="p-3 text-center text-sm text-amber-600">' + us.extDeadline + '</td>'
+                        + '<td class="p-3 text-center text-sm text-blue-700">' + us.hours.toFixed(2) + '</td>'
+                        + '</tr>';
+                    // Chi tiết theo Dự án
+                    const byProject = {};
+                    uTasks.forEach(t => {
+                        const pcode = t.project_code || '(Không có dự án)';
+                        if (!byProject[pcode]) byProject[pcode] = [];
+                        byProject[pcode].push(t);
+                    });
+                    Object.keys(byProject).sort().forEach(pcode => {
+                        const pTasks = byProject[pcode];
+                        const ps = calcTaskStats(pTasks);
+                        tbody += '<tr class="border-b hover:bg-slate-50">'
+                            + '<td class="p-3 text-xs text-slate-600 pl-8">📁 ' + pcode + '</td>'
+                            + '<td class="p-3 text-center text-xs text-slate-700">' + ps.total + '</td>'
+                            + '<td class="p-3 text-center text-xs text-emerald-600">' + ps.done + '</td>'
+                            + '<td class="p-3 text-center text-xs text-rose-500">' + ps.missDeadline + '</td>'
+                            + '<td class="p-3 text-center text-xs text-amber-500">' + ps.extDeadline + '</td>'
+                            + '<td class="p-3 text-center text-xs text-blue-600">' + ps.hours.toFixed(2) + '</td>'
+                            + '</tr>';
+                    });
+                });
+            }
+
+            // Dòng TỔNG CỘNG
+            const total = calcTaskStats(allTasks);
+            const totalRow = '<tr class="bg-slate-800 text-white font-black border-t-2">'
+                + '<td class="p-3 text-sm uppercase tracking-wider">TỔNG CỘNG</td>'
+                + '<td class="p-3 text-center text-sm">' + total.total + '</td>'
+                + '<td class="p-3 text-center text-sm text-emerald-300">' + total.done + '</td>'
+                + '<td class="p-3 text-center text-sm text-rose-300">' + total.missDeadline + '</td>'
+                + '<td class="p-3 text-center text-sm text-amber-300">' + total.extDeadline + '</td>'
+                + '<td class="p-3 text-center text-sm text-blue-300">' + total.hours.toFixed(2) + '</td>'
+                + '</tr>';
+
+            return '<div class="rounded-xl border overflow-hidden overflow-x-auto">'
+                + '<table class="w-full text-left" style="min-width:640px">'
+                + theadHtml
+                + '<tbody class="divide-y">' + tbody + '</tbody>'
+                + '<tfoot>' + totalRow + '</tfoot>'
                 + '</table></div>';
         }
 
         function exportReport100502Excel() {
             const from = document.getElementById('rpt0502_from')?.value || '';
             const to   = document.getElementById('rpt0502_to')?.value || '';
-            const rows = getReport100502Data(from, to);
-            if (!rows.length) { alert('Không có dữ liệu để xuất!'); return; }
+            const groupMode = _rpt0502Group || 'project';
+            const allTasks = getReport100502AllTasks(from, to);
+            if (!allTasks.length) { alert('Không có dữ liệu để xuất!'); return; }
 
-            const sheetData = [['Người thực hiện', 'Ngày', 'Tổng thời gian (giờ)']];
-            rows.forEach(r => {
-                const dayHours = r.tasks.reduce((s,t) => s + (parseFloat(t.act_time)||0), 0);
-                const [fy, fm, fd2] = r.dayKey.split('-');
-                sheetData.push([getUserName(r.user_id), fd2 + '/' + fm + '/' + fy, parseFloat((dayHours/3600).toFixed(2))]);
-            });
+            const sheetData = [['Nhóm', 'Chi tiết', 'Tổng CV', 'Hoàn thành', 'Trượt deadline', 'Dời deadline', 'Tổng giờ (h)']];
+
+            if (groupMode === 'project') {
+                const byProject = {};
+                allTasks.forEach(t => { const p = t.project_code || '(Không có dự án)'; if (!byProject[p]) byProject[p] = []; byProject[p].push(t); });
+                Object.keys(byProject).sort().forEach(pcode => {
+                    const ps = calcTaskStats(byProject[pcode]);
+                    sheetData.push([pcode, '[Tổng dự án]', ps.total, ps.done, ps.missDeadline, ps.extDeadline, parseFloat(ps.hours.toFixed(2))]);
+                    const byUser = {};
+                    byProject[pcode].forEach(t => { if (!byUser[t.user_id]) byUser[t.user_id] = []; byUser[t.user_id].push(t); });
+                    Object.keys(byUser).sort((a,b) => getUserName(a).localeCompare(getUserName(b))).forEach(uid => {
+                        const us = calcTaskStats(byUser[uid]);
+                        sheetData.push([pcode, getUserName(uid), us.total, us.done, us.missDeadline, us.extDeadline, parseFloat(us.hours.toFixed(2))]);
+                    });
+                });
+            } else {
+                const byUser = {};
+                allTasks.forEach(t => { if (!byUser[t.user_id]) byUser[t.user_id] = []; byUser[t.user_id].push(t); });
+                Object.keys(byUser).sort((a,b) => getUserName(a).localeCompare(getUserName(b))).forEach(uid => {
+                    const us = calcTaskStats(byUser[uid]);
+                    sheetData.push([getUserName(uid), '[Tổng người thực hiện]', us.total, us.done, us.missDeadline, us.extDeadline, parseFloat(us.hours.toFixed(2))]);
+                    const byProject = {};
+                    byUser[uid].forEach(t => { const p = t.project_code || '(Không có dự án)'; if (!byProject[p]) byProject[p] = []; byProject[p].push(t); });
+                    Object.keys(byProject).sort().forEach(pcode => {
+                        const ps = calcTaskStats(byProject[pcode]);
+                        sheetData.push([getUserName(uid), pcode, ps.total, ps.done, ps.missDeadline, ps.extDeadline, parseFloat(ps.hours.toFixed(2))]);
+                    });
+                });
+            }
 
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(sheetData);
-            ws['!cols'] = [{ wch: 25 }, { wch: 15 }, { wch: 22 }];
+            ws['!cols'] = [{ wch: 25 }, { wch: 25 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }];
             XLSX.utils.book_append_sheet(wb, ws, 'Báo cáo làm việc');
             XLSX.writeFile(wb, 'BaoCao_LamViec_' + from.replace(/\//g,'-') + '_den_' + to.replace(/\//g,'-') + '.xlsx');
         }
@@ -2180,8 +2506,11 @@
         function applyReport100502() {
             const from = document.getElementById('rpt0502_from').value;
             const to   = document.getElementById('rpt0502_to').value;
-            document.getElementById('rpt0502_table_area').innerHTML = buildReport100502Table(from, to);
+            document.getElementById('rpt0502_table_area').innerHTML = buildReport100502Table(from, to, _rpt0502Group);
         }
+
+        window.setReport100502Group = setReport100502Group;
+        window.exportReport100502Excel = exportReport100502Excel;
         // =============================================
         // 10.06 - VẮNG MẶT / RA NGOÀI
         // =============================================
@@ -2283,6 +2612,11 @@
                             </div>
                             <button onclick="openOutofficeForm()" class="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:shadow-blue-200">+ Thêm lịch</button>
                         </div>
+                        <div class="flex gap-3 mb-4 text-[10px] font-black">
+                            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-orange-200 border border-orange-300"></span><span class="text-orange-700">Nghỉ</span></span>
+                            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-blue-200 border border-blue-300"></span><span class="text-blue-700">Làm việc ngoài</span></span>
+                            <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm bg-violet-200 border border-violet-300"></span><span class="text-violet-700">Đi họp</span></span>
+                        </div>
 
                         <div class="grid grid-cols-7 gap-px bg-slate-200 border rounded-xl overflow-hidden shadow-inner">
                             ${['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'].map(d => `<div class="bg-slate-50 p-3 text-center font-black text-[10px] text-slate-400">${d}</div>`).join('')}
@@ -2300,10 +2634,17 @@
                                         const th = formatOutofficeTime(rec.to_hour);
                                         const timeStr = fh && th ? `${fh}-${th}` : '';
                                         const desc = rec.descript ? ` ${rec.descript}` : '';
-                                        return `<div class="text-[8px] bg-orange-100 text-orange-700 border border-orange-200 p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal cursor-pointer"
+                                        const typeNum = parseInt(rec.type) || 1;
+                                        const typeStyle = typeNum === 2
+                                            ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                                            : typeNum === 3
+                                                ? 'bg-violet-100 text-violet-700 border border-violet-200'
+                                                : 'bg-orange-100 text-orange-700 border border-orange-200';
+                                        const typeIcon = typeNum === 2 ? '💼' : typeNum === 3 ? '🤝' : '🚪';
+                                        return `<div class="text-[8px] ${typeStyle} p-1 mb-0.5 rounded-md font-bold break-words whitespace-normal cursor-pointer"
                                             onclick="event.stopPropagation(); openOutofficeForm(${JSON.stringify(rec).replace(/"/g,'&quot;')})"
                                             title="${uname}: ${rec.descript || ''} ${timeStr}">
-                                            🚪 ${uname} ${timeStr}${desc}
+                                            ${typeIcon} ${uname} ${timeStr}${desc}
                                         </div>`;
                                     }).join('')}
                                 </div>`;
@@ -2322,6 +2663,7 @@
                                 <thead class="bg-slate-50 border-b">
                                     <tr class="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                         <th class="p-3">Nhân viên</th>
+                                        <th class="p-3 text-center">Phân loại</th>
                                         <th class="p-3 text-center">Ngày</th>
                                         <th class="p-3 text-center">Giờ từ</th>
                                         <th class="p-3 text-center">Giờ đến</th>
@@ -2331,13 +2673,18 @@
                                 </thead>
                                 <tbody class="divide-y">
                                     ${allMonthRecs.length === 0
-                                        ? `<tr><td colspan="6" class="p-6 text-center text-slate-400 text-xs">✅ Không có vắng mặt nào trong tháng này</td></tr>`
+                                        ? `<tr><td colspan="7" class="p-6 text-center text-slate-400 text-xs">✅ Không có vắng mặt nào trong tháng này</td></tr>`
                                         : allMonthRecs.sort((a,b) => {
                                             const da = normOutofficeDate(a.date), db = normOutofficeDate(b.date);
                                             return da.localeCompare(db);
-                                        }).map(rec => `
+                                        }).map(rec => {
+                                            const typeNum = parseInt(rec.type) || 1;
+                                            const typeLabel = typeNum === 2 ? '💼 Làm ngoài' : typeNum === 3 ? '🤝 Đi họp' : '🏖️ Nghỉ';
+                                            const typeCls = typeNum === 2 ? 'bg-blue-100 text-blue-700' : typeNum === 3 ? 'bg-violet-100 text-violet-700' : 'bg-orange-100 text-orange-700';
+                                            return `
                                         <tr class="hover:bg-orange-50/40 cursor-pointer" onclick="openOutofficeForm(${JSON.stringify(rec).replace(/"/g,'&quot;')})">
                                             <td class="p-3 font-bold text-slate-700 text-sm">${getUserName(rec.user_id)}</td>
+                                            <td class="p-3 text-center"><span class="text-[9px] font-black px-2 py-1 rounded-full ${typeCls}">${typeLabel}</span></td>
                                             <td class="p-3 text-center text-xs text-slate-600">${formatOutofficeDate(rec.date)}</td>
                                             <td class="p-3 text-center text-xs text-slate-600">${formatOutofficeTime(rec.from_hour) || '-'}</td>
                                             <td class="p-3 text-center text-xs text-slate-600">${formatOutofficeTime(rec.to_hour) || '-'}</td>
@@ -2345,7 +2692,8 @@
                                             <td class="p-3 text-right" onclick="event.stopPropagation()">
                                                 <button onclick="doDeleteOutoffice('${rec.id}')" class="text-red-500 hover:text-red-700 font-bold text-xs px-2 py-1 rounded-lg hover:bg-red-50">Xóa</button>
                                             </td>
-                                        </tr>`).join('')
+                                        </tr>`;
+                                        }).join('')
                                     }
                                 </tbody>
                             </table>
@@ -2481,6 +2829,23 @@
                         <form id="form-outoffice" class="p-6 space-y-5">
                             <input type="hidden" name="id" value="${rec?.id || ''}">
 
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="text-[10px] font-black uppercase text-slate-400">Người tạo</label>
+                                    <select name="user_id" class="w-full p-3 border-2 rounded-xl outline-none focus:border-blue-400 mt-1 text-sm bg-white">
+                                        ${MASTER_DATA.users.map(u => `<option value="${u.user_id}" ${(rec?.user_id == u.user_id || (!isEdit && SESSION.user.user_id == u.user_id)) ? 'selected' : ''}>${u.username}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-black uppercase text-slate-400">Phân loại</label>
+                                    <select name="type" class="w-full p-3 border-2 rounded-xl outline-none focus:border-blue-400 mt-1 text-sm bg-white">
+                                        <option value="1" ${(!rec?.type || rec?.type == 1) ? 'selected' : ''}>🏖️ Nghỉ</option>
+                                        <option value="2" ${rec?.type == 2 ? 'selected' : ''}>💼 Làm việc ngoài</option>
+                                        <option value="3" ${rec?.type == 3 ? 'selected' : ''}>🤝 Đi họp</option>
+                                    </select>
+                                </div>
+                            </div>
+
                             <div>
                                 <label class="text-[10px] font-black uppercase text-slate-400">Ngày *</label>
                                 <input type="text" name="date" required class="date-mask w-full p-3 border-2 rounded-xl outline-none focus:border-blue-400 mt-1" placeholder="DD/MM/YYYY" maxlength="10" value="${currentDateVal}">
@@ -2532,7 +2897,7 @@
                 }
 
                 data.unit_id = SESSION.unit.unit_id;
-                data.user_id = SESSION.user.user_id;
+                // user_id đã lấy từ select trong form (trường Người tạo)
 
                 const now = new Date();
                 const nowStr = `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
@@ -2732,6 +3097,25 @@
             } else {
                 badge.classList.add('hidden');
             }
+            updateBirthdayBadge();
+        }
+
+        function updateBirthdayBadge() {
+            const bdUsers = getTodayBirthdays();
+            const btn = document.getElementById('birthday-bell-btn');
+            const badge = document.getElementById('birthday-badge');
+            if (!btn || !badge) return;
+            if (bdUsers.length > 0) {
+                badge.textContent = bdUsers.length;
+                btn.classList.remove('hidden');
+            } else {
+                btn.classList.add('hidden');
+            }
+        }
+
+        function openBirthdayFromHeader() {
+            const bdUsers = getTodayBirthdays();
+            if (bdUsers.length > 0) showBirthdayModal(bdUsers);
         }
 
         function showDeadlinePanel() {
@@ -2752,7 +3136,36 @@
 
             const totalUnread = unreadDL.length + notiTasks.length + newAssigned.length;
 
-            if (allDeadline.length === 0 && notiTasks.length === 0 && newAssigned.length === 0) {
+            // --- Sinh nhật hôm nay ---
+            const bdUsers = getTodayBirthdays();
+            if (bdUsers.length > 0) {
+                html += '<div class="px-4 py-2 bg-pink-50 flex items-center justify-between border-b">'
+                    + '<span class="text-[10px] font-black text-pink-600 uppercase tracking-widest">🎂 Sinh nhật hôm nay</span>'
+                    + '</div>';
+                html += bdUsers.map(u => {
+                    const initials = (u.fullname || u.username || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                    const ageText = (() => {
+                        if (!u.birth_date) return '';
+                        const bd = u.birth_date.toString().trim();
+                        let year;
+                        if (/^\d{4}-\d{2}-\d{2}/.test(bd)) year = parseInt(bd.split('-')[0], 10);
+                        else if (/^\d{2}\/\d{2}\/\d{4}$/.test(bd)) year = parseInt(bd.split('/')[2], 10);
+                        else { const d = new Date(bd); year = isNaN(d) ? null : d.getFullYear(); }
+                        return year ? (new Date().getFullYear() - year) + ' tuổi' : '';
+                    })();
+                    return '<div class="p-4 hover:bg-pink-50/70 transition border-b last:border-0 cursor-pointer" onclick="closeDeadlinePanel();setTimeout(()=>openBirthdayFromHeader(),150)">'
+                        + '<div class="flex items-center gap-3">'
+                        + '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:0.85rem;font-weight:900;color:#fff;flex-shrink:0;border:2px solid #fbbf24">' + initials + '</div>'
+                        + '<div class="flex-1 min-w-0">'
+                        + '<div class="font-bold text-slate-800 text-sm truncate">' + (u.fullname || u.username) + '</div>'
+                        + '<div class="text-xs text-pink-500 font-semibold">' + (u.department || u.role || '') + (ageText ? ' · ' + ageText : '') + '</div>'
+                        + '</div>'
+                        + '<span class="text-xl">🎂</span>'
+                        + '</div></div>';
+                }).join('');
+            }
+
+            if (allDeadline.length === 0 && notiTasks.length === 0 && newAssigned.length === 0 && bdUsers.length === 0) {
                 body.innerHTML = '<div class="p-6 text-center text-slate-400 text-sm">&#127881; Không có thông báo nào!</div>';
                 document.getElementById('deadline-panel').classList.remove('hidden');
                 return;
@@ -2922,6 +3335,117 @@
         }
 
 
+        // ===== BIRTHDAY NOTIFICATION =====
+
+        function getTodayBirthdays() {
+            const users = MASTER_DATA.users || [];
+            const now = new Date();
+            const todayMonth = now.getMonth() + 1; // 1-12
+            const todayDay = now.getDate();
+
+            return users.filter(u => {
+                if (!u.birth_date) return false;
+                // Hỗ trợ nhiều định dạng: YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY
+                let bd = u.birth_date.toString().trim();
+                let month, day;
+                if (/^\d{4}-\d{2}-\d{2}/.test(bd)) {
+                    // ISO: 1990-12-25
+                    const parts = bd.split('-');
+                    month = parseInt(parts[1], 10);
+                    day = parseInt(parts[2], 10);
+                } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(bd)) {
+                    // DD/MM/YYYY hoặc MM/DD/YYYY — ưu tiên DD/MM/YYYY (phổ biến VN)
+                    const parts = bd.split('/');
+                    day = parseInt(parts[0], 10);
+                    month = parseInt(parts[1], 10);
+                } else {
+                    // Thử parse bằng Date
+                    const d = new Date(bd);
+                    if (isNaN(d)) return false;
+                    month = d.getMonth() + 1;
+                    day = d.getDate();
+                }
+                return month === todayMonth && day === todayDay;
+            });
+        }
+
+        function showBirthdayModal(birthdayUsers) {
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+            document.getElementById('bd-today-date').textContent = dateStr;
+
+            const listEl = document.getElementById('bd-list');
+            listEl.innerHTML = birthdayUsers.map(u => {
+                const initials = (u.fullname || u.username || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+                const ageText = u.birth_date ? (() => {
+                    let year;
+                    const bd = u.birth_date.toString().trim();
+                    if (/^\d{4}-\d{2}-\d{2}/.test(bd)) year = parseInt(bd.split('-')[0], 10);
+                    else if (/^\d{2}\/\d{2}\/\d{4}$/.test(bd)) year = parseInt(bd.split('/')[2], 10);
+                    else { const d = new Date(bd); year = isNaN(d) ? null : d.getFullYear(); }
+                    return year ? '🎈 ' + (now.getFullYear() - year) + ' tuổi' : '';
+                })() : '';
+                return `<div class="flex items-center gap-4 bg-gradient-to-r from-pink-50 to-purple-50 rounded-2xl p-4 border border-pink-100">
+                    <div class="bd-avatar">${initials}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="bd-name-tag font-black text-lg leading-tight">${u.fullname || u.username}</div>
+                        ${u.department || u.role ? `<div class="text-slate-500 text-xs mt-0.5">${u.department || u.role || ''}</div>` : ''}
+                        ${ageText ? `<div class="text-purple-500 text-xs font-bold mt-1">${ageText}</div>` : ''}
+                    </div>
+                    <div class="text-2xl">🎂</div>
+                </div>`;
+            }).join('');
+
+            // Confetti
+            const confettiEl = document.getElementById('bd-confetti');
+            confettiEl.innerHTML = '';
+            const emojis = ['🎉', '🎊', '✨', '🌟', '🎈', '💫', '🎁', '🥳'];
+            for (let i = 0; i < 18; i++) {
+                const span = document.createElement('span');
+                span.className = 'confetti-emoji';
+                span.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                span.style.left = Math.random() * 100 + '%';
+                span.style.animationDuration = (2 + Math.random() * 3) + 's';
+                span.style.animationDelay = (Math.random() * 3) + 's';
+                span.style.fontSize = (1 + Math.random()) + 'rem';
+                confettiEl.appendChild(span);
+            }
+
+            document.getElementById('birthday-modal').classList.remove('hidden');
+        }
+
+        function closeBirthdayModal() {
+            document.getElementById('birthday-modal').classList.add('hidden');
+        }
+
+        function checkAndNotifyBirthday() {
+            const birthdayUsers = getTodayBirthdays();
+            const userId = SESSION && SESSION.user ? SESSION.user.user_id : null;
+            console.log('[Birthday] Số user sinh nhật hôm nay:', birthdayUsers.length, '| user_id:', userId);
+
+            // Luôn cập nhật badge dù đã thông báo hay chưa
+            updateBirthdayBadge();
+
+            if (birthdayUsers.length === 0) return;
+
+            // Đảm bảo user_id hợp lệ trước khi tạo key
+            if (!userId) {
+                console.warn('[Birthday] Chưa có SESSION.user.user_id, bỏ qua.');
+                return;
+            }
+
+            const todayKey = 'birthday_notified_' + new Date().toISOString().slice(0, 10) + '_' + userId;
+            console.log('[Birthday] Key hôm nay:', todayKey, '| Đã notify?', !!localStorage.getItem(todayKey));
+
+            if (!localStorage.getItem(todayKey)) {
+                localStorage.setItem(todayKey, '1');
+                // Dọn key cũ hơn 7 ngày
+                Object.keys(localStorage).filter(k => k.startsWith('birthday_notified_')).sort().slice(0, -7).forEach(k => localStorage.removeItem(k));
+                // Delay nhẹ để app render xong
+                setTimeout(() => showBirthdayModal(birthdayUsers), 1200);
+            }
+        }
+
         // Gắn tất cả function vào window để inline onclick trong innerHTML luôn tìm thấy
         window.applyTaskFilter = applyTaskFilter;
         window.refreshTable1001 = refreshTable1001;
@@ -2930,6 +3454,7 @@
         window.openTaskForm = openTaskForm;
         window.doQuickSearch = doQuickSearch;
         window.applyDashboardFilter = applyDashboardFilter;
+        window.applyReport100502 = applyReport100502;
         window.changeMonth = changeMonth;
         window.renderCalendar = renderCalendar;
         window.doQuickStart = doQuickStart;
@@ -2945,6 +3470,9 @@
         window.markNotiRead = markNotiRead;
         window.markAllNotiRead = markAllNotiRead;
         window.requestNotifPermission = requestNotifPermission;
+        window.closeBirthdayModal = closeBirthdayModal;
+        window.openBirthdayFromHeader = openBirthdayFromHeader;
+        window.updateBirthdayBadge = updateBirthdayBadge;
         </script>
 
     <!-- Deadline Notification Panel -->
@@ -2977,6 +3505,34 @@
                 <div id="toast-msg" class="text-xs text-amber-100"></div>
             </div>
             <button onclick="closeToast()" class="text-amber-200 hover:text-white flex-shrink-0">&#10005;</button>
+        </div>
+    </div>
+
+    <!-- Birthday Notification Modal -->
+    <div id="birthday-modal" class="modal-bg fixed inset-0 hidden flex items-center justify-center p-4">
+        <div class="birthday-card bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden relative">
+            <!-- Confetti container -->
+            <div id="bd-confetti" class="absolute inset-0 overflow-hidden pointer-events-none rounded-3xl"></div>
+            <!-- Header -->
+            <div class="bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 p-6 text-center relative">
+                <div class="text-5xl mb-2">🎂</div>
+                <div class="text-white font-black text-xl tracking-wide">Chúc Mừng Sinh Nhật!</div>
+                <div class="text-pink-200 text-xs mt-1" id="bd-today-date"></div>
+            </div>
+            <!-- Body -->
+            <div class="p-6">
+                <div id="bd-list" class="space-y-4"></div>
+                <div class="mt-6 text-center">
+                    <div class="text-2xl mb-1">🎊 🥳 🎉</div>
+                    <p class="text-slate-500 text-xs">Chúc bạn luôn vui vẻ, sức khỏe và hạnh phúc!</p>
+                </div>
+                <button onclick="closeBirthdayModal();showDeadlinePanel()" class="mt-5 w-full py-3 bg-gradient-to-r from-pink-500 to-purple-500 text-white rounded-2xl font-black text-sm hover:opacity-90 transition shadow-lg">
+                    🔔 Xem tất cả thông báo
+                </button>
+                <button onclick="closeBirthdayModal()" class="mt-2 w-full py-2.5 bg-slate-100 text-slate-500 rounded-2xl font-bold text-sm hover:bg-slate-200 transition">
+                    Đóng
+                </button>
+            </div>
         </div>
     </div>
 
