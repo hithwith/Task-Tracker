@@ -348,15 +348,13 @@
             a1.onclick = () => switchMenu('10.05.01', 'Thống kê thời gian làm việc cá nhân');
             reportGroup.appendChild(a1);
 
-            if (isAdmin) {
-                const a2 = document.createElement('a');
-                a2.href = 'javascript:void(0)';
-                a2.id = 'menu-10.05.02';
-                a2.className = 'sidebar-item flex items-center pl-6 pr-4 py-3 rounded-xl text-xs font-bold transition';
-                a2.textContent = '📈 Thống kê thời gian làm việc phòng';
-                a2.onclick = () => switchMenu('10.05.02', 'Báo cáo tổng tình hình làm việc phòng');
-                reportGroup.appendChild(a2);
-            }
+            const a2 = document.createElement('a');
+            a2.href = 'javascript:void(0)';
+            a2.id = 'menu-10.05.02';
+            a2.className = 'sidebar-item flex items-center pl-6 pr-4 py-3 rounded-xl text-xs font-bold transition';
+            a2.textContent = '📈 Thống kê thời gian làm việc phòng';
+            a2.onclick = () => switchMenu('10.05.02', 'Báo cáo tổng tình hình làm việc phòng');
+            reportGroup.appendChild(a2);
             sidebarEl.appendChild(reportGroup);
             console.log('sidebar HTML sau khi build:', sidebarEl.innerHTML.substring(0, 800));
             document.getElementById('page-title').innerText = 'Tổng hợp công việc';
