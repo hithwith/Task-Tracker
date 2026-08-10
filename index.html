@@ -1131,7 +1131,15 @@
                             </div>
                             <div>
                                 <label class="text-[10px] font-black uppercase text-slate-400">Trạng thái</label>
-                                <select name="status" class="w-full px-3 py-2 border-2 rounded-lg text-sm">${MASTER_DATA.statuses.map(s => `<option value="${s.status_code}" ${t?.status == s.status_code ? 'selected' : ''}>${s.status_name}</option>`).join('')}</select>
+                                ${(t && (t.status == 3 || t.status == 5)) ? `
+                                <select name="status" disabled class="w-full px-3 py-2 border-2 rounded-lg text-sm bg-slate-100 text-slate-500 cursor-not-allowed">
+                                    <option value="${t.status}" selected>${getStatusName(t.status)}</option>
+                                </select>
+                                <input type="hidden" name="status" value="${t.status}">
+                                <div class="text-[9px] text-slate-400 mt-0.5 normal-case">Trạng thái này chỉ thay đổi qua nút Bắt đầu / Xong</div>
+                                ` : `
+                                <select name="status" class="w-full px-3 py-2 border-2 rounded-lg text-sm">${MASTER_DATA.statuses.filter(s => s.status_code != 3 && s.status_code != 5).map(s => `<option value="${s.status_code}" ${t?.status == s.status_code ? 'selected' : ''}>${s.status_name}</option>`).join('')}</select>
+                                `}
                             </div>
                             <div class="col-span-3 relative" id="noti_user_wrapper">
                                 <label class="text-[10px] font-black uppercase text-slate-400">Người nhận thông báo</label>
@@ -1153,13 +1161,20 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-span-3">
+                            <div class="col-span-3 flex flex-wrap gap-x-8 gap-y-2">
                                 <label class="flex items-center gap-3 cursor-pointer select-none group" onclick="event.preventDefault(); const cb=document.getElementById('cb_repeat_yn'); cb.checked=!cb.checked; const tr=document.getElementById('toggle_repeat_track'); const th=document.getElementById('toggle_repeat_thumb'); if(cb.checked){tr.style.background='#2563eb';th.style.transform='translateX(1.25rem)';}else{tr.style.background='#e2e8f0';th.style.transform='none';}">
                                     <input type="checkbox" name="repeat_yn" id="cb_repeat_yn" value="1" ${t?.repeat_yn == 1 ? 'checked' : ''} class="sr-only">
                                     <div id="toggle_repeat_track" class="toggle-track" style="background:${t?.repeat_yn == 1 ? '#2563eb' : '#e2e8f0'}">
                                         <div id="toggle_repeat_thumb" class="toggle-thumb" style="transform:${t?.repeat_yn == 1 ? 'translateX(1.25rem)' : 'none'}"></div>
                                     </div>
                                     <span class="text-sm font-bold text-slate-600 group-hover:text-blue-600 transition-colors">🔁 Lặp lại hằng tuần</span>
+                                </label>
+                                <label class="flex items-center gap-3 cursor-pointer select-none group" onclick="event.preventDefault(); const cb=document.getElementById('cb_over_time'); cb.checked=!cb.checked; const tr=document.getElementById('toggle_ot_track'); const th=document.getElementById('toggle_ot_thumb'); if(cb.checked){tr.style.background='#2563eb';th.style.transform='translateX(1.25rem)';}else{tr.style.background='#e2e8f0';th.style.transform='none';}">
+                                    <input type="checkbox" name="over_time" id="cb_over_time" value="1" ${t?.over_time == 1 ? 'checked' : ''} class="sr-only">
+                                    <div id="toggle_ot_track" class="toggle-track" style="background:${t?.over_time == 1 ? '#2563eb' : '#e2e8f0'}">
+                                        <div id="toggle_ot_thumb" class="toggle-thumb" style="transform:${t?.over_time == 1 ? 'translateX(1.25rem)' : 'none'}"></div>
+                                    </div>
+                                    <span class="text-sm font-bold text-slate-600 group-hover:text-blue-600 transition-colors">⏰ Tăng ca</span>
                                 </label>
                             </div>
                             <div class="col-span-3 flex justify-between border-t pt-3 mt-1 pb-1">
@@ -1203,6 +1218,8 @@
                 data.noti_user = notiChecked.join(',');
                 // Thu thập repeat_yn (checkbox toggle)
                 data.repeat_yn = document.getElementById('cb_repeat_yn')?.checked ? 1 : 0;
+                // Thu thập over_time (checkbox toggle Tăng ca)
+                data.over_time = document.getElementById('cb_over_time')?.checked ? 1 : 0;
                 const isNewTask = !data.id;
                 const _now = new Date();
                 const nowIso = `${_now.getDate().toString().padStart(2,'0')}/${(_now.getMonth()+1).toString().padStart(2,'0')}/${_now.getFullYear()} ${_now.getHours()}:${_now.getMinutes().toString().padStart(2,'0')}:${_now.getSeconds().toString().padStart(2,'0')}`;
@@ -1262,51 +1279,9 @@
                                     syncTasksCache();
                                 }
                             }
-                            // Nếu task có repeat_yn=1 và vừa đánh dấu hoàn thành (status=5), tạo task mới tuần kế tiếp
-                            if (parseInt(apiPayload.repeat_yn) === 1 && String(apiPayload.status) === '5') {
-                                const addWeeks = (dateStr, weeks) => {
-                                    const d = parseLocalDate(dateStr);
-                                    if (!d) return null;
-                                    d.setDate(d.getDate() + weeks * 7);
-                                    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-                                };
-                                const nextStart = addWeeks(apiPayload.start_date, 1);
-                                const nextDue   = addWeeks(apiPayload.due_date, 1);
-                                if (nextStart && nextDue) {
-                                    const _nw = new Date();
-                                    const _nwStr = `${_nw.getDate().toString().padStart(2,'0')}/${(_nw.getMonth()+1).toString().padStart(2,'0')}/${_nw.getFullYear()} ${_nw.getHours()}:${_nw.getMinutes().toString().padStart(2,'0')}:${_nw.getSeconds().toString().padStart(2,'0')}`;
-                                    const repeatPayload = {
-                                        task_name: apiPayload.task_name,
-                                        description: apiPayload.description || '',
-                                        project_code: apiPayload.project_code,
-                                        user_id: apiPayload.user_id,
-                                        priority: apiPayload.priority,
-                                        start_date: nextStart,
-                                        due_date: nextDue,
-                                        status: 0,
-                                        noti_user: apiPayload.noti_user || '',
-                                        repeat_yn: 1,
-                                        unit_id: apiPayload.unit_id,
-                                        user_id0: SESSION.user.user_id,
-                                        user_id2: SESSION.user.user_id,
-                                        datetime0: _nwStr,
-                                        datetime2: _nwStr
-                                    };
-                                    const tmpRepeatId = '_tmp_repeat_' + Date.now();
-                                    ALL_TASKS.push({ ...repeatPayload, id: tmpRepeatId });
-                                    syncTasksCache();
-                                    if (currentMenuId === '10.01') refreshTable1001();
-                                    else if (currentMenuId === '10.02') renderCalendar();
-                                    fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: repeatPayload }) })
-                                        .then(r => r.json())
-                                        .then(res2 => {
-                                            if (res2.status === 'success' && res2.id) {
-                                                const ri = ALL_TASKS.findIndex(t => String(t.id) === tmpRepeatId);
-                                                if (ri > -1) { ALL_TASKS[ri].id = res2.id; syncTasksCache(); }
-                                            }
-                                        }).catch(console.error);
-                                }
-                            }
+                            // Lưu ý: việc tạo công việc lặp lại tuần kế tiếp (khi repeat_yn=1 và hoàn thành)
+                            // được xử lý duy nhất trong saveDoneTask() ở luồng "Xong công việc",
+                            // để tránh tạo trùng lặp mỗi lần sửa lại một công việc đã hoàn thành.
                         } else {
                             TASKS_DIRTY = true;
                             console.warn('saveTask warning:', result.message);
@@ -1370,9 +1345,14 @@
         }
 
         function doQuickStart(id) {
+            // Chặn thao tác trên task tạm chưa sync xong với server
+            if (String(id).startsWith('_tmp_')) {
+                alert('Công việc này vừa được tạo và chưa đồng bộ xong. Vui lòng chờ vài giây rồi thử lại.');
+                return;
+            }
             showConfirm("Bắt đầu", "Xác nhận bắt đầu thực hiện công việc?", () => {
                 const now = new Date();
-                const actStart = `${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getFullYear()} ${now.getHours()}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+                const actStart = toDatetime0Str(now);
                 const task = ALL_TASKS.find(t => t.id == id);
                 if (task) {
                     task.status = 3;
@@ -1381,96 +1361,182 @@
                 refreshTable1001();
                 syncTasksCache();
                 fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: { id, status: 3, act_start_date: actStart } }) })
-                    .then(() => { TASKS_DIRTY = true; })
-                    .catch(() => { TASKS_DIRTY = true; });
+                    .then(r => r.json())
+                    .then(result => {
+                        TASKS_DIRTY = true;
+                        if (result.status !== 'success') {
+                            console.warn('Lỗi cập nhật trạng thái Bắt đầu:', result.message);
+                            alert('Lỗi lưu: ' + (result.message || 'Không xác định') + '\nDữ liệu sẽ được tải lại.');
+                        }
+                    })
+                    .catch(() => { TASKS_DIRTY = true; alert('Lỗi kết nối khi lưu. Dữ liệu sẽ được tải lại.'); });
             });
         }
 
+        // Bấm "XONG" -> mở màn hình nhập/điều chỉnh ngày giờ bắt đầu - kết thúc
         function doQuickDone(id) {
-            showConfirm("Hoàn thành", "Xác nhận công việc đã xong?", () => {
-                const finishTime = new Date();
-                // Format giống datetime0: DD/MM/YYYY H:MM:SS
-                const finishIso = `${finishTime.getDate().toString().padStart(2,'0')}/${(finishTime.getMonth()+1).toString().padStart(2,'0')}/${finishTime.getFullYear()} ${finishTime.getHours()}:${finishTime.getMinutes().toString().padStart(2,'0')}:${finishTime.getSeconds().toString().padStart(2,'0')}`;
-                const task = ALL_TASKS.find(t => t.id == id);
-                let duration = null;
-                let act_time = null;
-                if (task) {
-                    task.status = 5;
-                    task.finish_date = finishIso;
-                    // Tính số giây từ datetime0 đến thời điểm bấm Xong
-                    if (task.datetime0) {
-                        const start = parseDatetime0(task.datetime0);
-                        if (start && !isNaN(start)) {
-                            duration = Math.round((finishTime - start) / 1000);
-                            task.duration = duration;
-                        }
-                    }
-                    // Tính act_time: số giây từ act_start_date đến finish_date
-                    if (task.act_start_date) {
-                        const actStart = parseDatetime0(task.act_start_date);
-                        if (actStart && !isNaN(actStart)) {
-                            act_time = Math.round((finishTime - actStart) / 1000);
-                            task.act_time = act_time;
-                        }
+            // Chặn thao tác trên task tạm chưa sync xong với server
+            if (String(id).startsWith('_tmp_')) {
+                alert('Công việc này vừa được tạo/cập nhật và chưa đồng bộ xong. Vui lòng chờ vài giây rồi thử lại.');
+                return;
+            }
+            openDoneTaskModal(id);
+        }
+
+        function openDoneTaskModal(id) {
+            const task = ALL_TASKS.find(t => String(t.id) === String(id));
+            if (!task) return;
+
+            const startDate = task.act_start_date ? parseDatetime0(task.act_start_date) : null;
+            const nowDate = new Date();
+
+            const startVal = (startDate && !isNaN(startDate)) ? toDatetimeLocalValue(startDate) : toDatetimeLocalValue(nowDate);
+            const endVal = toDatetimeLocalValue(nowDate);
+
+            const html = `
+                <div id="done-task-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-3">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div class="px-5 py-3 bg-emerald-600 text-white font-black flex justify-between uppercase tracking-widest flex-shrink-0">
+                            <span>Hoàn thành công việc</span>
+                            <button onclick="closeModal('done-task-modal')" class="text-xl leading-none">&times;</button>
+                        </div>
+                        <div class="p-6 space-y-4">
+                            <div class="text-sm font-black text-slate-700">${task.task_name || ''}</div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Ngày giờ bắt đầu</label>
+                                <input type="datetime-local" id="dt_act_start" value="${startVal}" class="w-full px-3 py-2 border-2 rounded-lg text-sm outline-none focus:border-blue-400" oninput="recalcDoneDuration()">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400">Ngày giờ kết thúc</label>
+                                <input type="datetime-local" id="dt_act_end" value="${endVal}" class="w-full px-3 py-2 border-2 rounded-lg text-sm outline-none focus:border-blue-400" oninput="recalcDoneDuration()">
+                            </div>
+                            <div class="border-t pt-3">
+                                <label class="text-[10px] font-black uppercase text-slate-400">Số giờ / số phút đã làm việc (có thể điều chỉnh)</label>
+                                <div class="flex gap-2 items-center mt-1">
+                                    <input type="number" id="dt_act_hours" min="0" class="w-20 px-3 py-2 border-2 rounded-lg text-sm text-center outline-none focus:border-blue-400">
+                                    <span class="text-xs font-bold text-slate-400">giờ</span>
+                                    <input type="number" id="dt_act_minutes" min="0" max="59" class="w-20 px-3 py-2 border-2 rounded-lg text-sm text-center outline-none focus:border-blue-400">
+                                    <span class="text-xs font-bold text-slate-400">phút</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-4 bg-slate-50 border-t flex justify-end gap-3">
+                            <button type="button" onclick="closeModal('done-task-modal')" class="px-6 py-2 bg-gray-100 rounded-xl font-bold text-sm">HỦY</button>
+                            <button type="button" onclick="saveDoneTask('${id}')" class="px-8 py-2 bg-emerald-600 text-white rounded-xl font-black shadow-lg shadow-emerald-100 text-sm">XÁC NHẬN XONG</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.getElementById('modal-area').innerHTML = html;
+            recalcDoneDuration();
+        }
+
+        // Tự tính lại số giờ/số phút đã làm việc từ ngày giờ bắt đầu - kết thúc
+        function recalcDoneDuration() {
+            const sEl = document.getElementById('dt_act_start');
+            const eEl = document.getElementById('dt_act_end');
+            const hEl = document.getElementById('dt_act_hours');
+            const mEl = document.getElementById('dt_act_minutes');
+            if (!sEl || !eEl || !hEl || !mEl || !sEl.value || !eEl.value) return;
+            const start = new Date(sEl.value);
+            const end = new Date(eEl.value);
+            if (isNaN(start) || isNaN(end)) return;
+            let diffSec = Math.round((end - start) / 1000);
+            if (diffSec < 0) diffSec = 0;
+            hEl.value = Math.floor(diffSec / 3600);
+            mEl.value = Math.floor((diffSec % 3600) / 60);
+        }
+
+        // Lưu kết quả: ngày giờ bắt đầu -> act_start_date, ngày giờ kết thúc -> finish_date,
+        // số giờ/phút đã làm việc (có thể đã điều chỉnh) -> act_time (giây), status = 5 (Hoàn thành)
+        function saveDoneTask(id) {
+            const startVal = document.getElementById('dt_act_start').value;
+            const endVal = document.getElementById('dt_act_end').value;
+            const hoursVal = parseInt(document.getElementById('dt_act_hours').value) || 0;
+            const minutesVal = parseInt(document.getElementById('dt_act_minutes').value) || 0;
+
+            if (!startVal || !endVal) { alert('Vui lòng nhập đầy đủ ngày giờ bắt đầu và kết thúc.'); return; }
+
+            const startDate = new Date(startVal);
+            const endDate = new Date(endVal);
+            if (isNaN(startDate) || isNaN(endDate)) { alert('Ngày giờ không hợp lệ.'); return; }
+
+            const act_time = hoursVal * 3600 + minutesVal * 60;
+            const actStartIso = toDatetime0Str(startDate);
+            const finishIso = toDatetime0Str(endDate);
+
+            const task = ALL_TASKS.find(t => String(t.id) === String(id));
+            let duration = null;
+            if (task) {
+                task.status = 5;
+                task.act_start_date = actStartIso;
+                task.finish_date = finishIso;
+                task.act_time = act_time;
+                // Tính số giây từ datetime0 (thời điểm tạo task) đến thời điểm hoàn thành, để tương thích dữ liệu cũ
+                if (task.datetime0) {
+                    const start0 = parseDatetime0(task.datetime0);
+                    if (start0 && !isNaN(start0)) {
+                        duration = Math.round((endDate - start0) / 1000);
+                        task.duration = duration;
                     }
                 }
-                refreshTable1001();
-                syncTasksCache();
-                // Gửi API ngầm
-                const payload = { id, status: 5, finish_date: finishIso };
-                if (duration !== null) payload.duration = duration;
-                if (act_time !== null) payload.act_time = act_time;
-                fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: payload }) })
-                    .then(() => {
-                        TASKS_DIRTY = true;
-                        // Nếu task có repeat_yn=1, tạo task mới tuần kế tiếp
-                        if (task && parseInt(task.repeat_yn) === 1) {
-                            const addWeeks = (dateStr, weeks) => {
-                                if (!dateStr) return null;
-                                const d = parseLocalDate(dateStr);
-                                if (!d) return null;
-                                d.setDate(d.getDate() + weeks * 7);
-                                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            }
+            closeModal('done-task-modal');
+            refreshTable1001();
+            syncTasksCache();
+
+            // Gửi API ngầm
+            const payload = { id, status: 5, act_start_date: actStartIso, finish_date: finishIso, act_time };
+            if (duration !== null) payload.duration = duration;
+            fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: payload }) })
+                .then(() => {
+                    TASKS_DIRTY = true;
+                    // Nếu task có repeat_yn=1, tạo task mới tuần kế tiếp
+                    if (task && parseInt(task.repeat_yn) === 1) {
+                        const addWeeks = (dateStr, weeks) => {
+                            if (!dateStr) return null;
+                            const d = parseLocalDate(dateStr);
+                            if (!d) return null;
+                            d.setDate(d.getDate() + weeks * 7);
+                            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                        };
+                        const nextStart = addWeeks(task.start_date, 1);
+                        const nextDue   = addWeeks(task.due_date, 1);
+                        if (nextStart && nextDue) {
+                            const _nr = new Date();
+                            const _nrStr = toDatetime0Str(_nr);
+                            const repeatPayload = {
+                                task_name: task.task_name,
+                                description: task.description || '',
+                                project_code: task.project_code,
+                                user_id: task.user_id,
+                                priority: (task.priority !== undefined && task.priority !== null) ? String(task.priority) : '',
+                                start_date: nextStart,
+                                due_date: nextDue,
+                                status: '0',
+                                noti_user: task.noti_user || '',
+                                repeat_yn: 1,
+                                unit_id: task.unit_id || SESSION.unit.unit_id,
+                                user_id0: SESSION.user.user_id,
+                                user_id2: SESSION.user.user_id,
+                                datetime0: _nrStr,
+                                datetime2: _nrStr
                             };
-                            const nextStart = addWeeks(task.start_date, 1);
-                            const nextDue   = addWeeks(task.due_date, 1);
-                            if (nextStart && nextDue) {
-                                const _nr = new Date();
-                                const _nrStr = `${_nr.getDate().toString().padStart(2,'0')}/${(_nr.getMonth()+1).toString().padStart(2,'0')}/${_nr.getFullYear()} ${_nr.getHours()}:${_nr.getMinutes().toString().padStart(2,'0')}:${_nr.getSeconds().toString().padStart(2,'0')}`;
-                                const repeatPayload = {
-                                    task_name: task.task_name,
-                                    description: task.description || '',
-                                    project_code: task.project_code,
-                                    user_id: task.user_id,
-                                    priority: task.priority,
-                                    start_date: nextStart,
-                                    due_date: nextDue,
-                                    status: 0,
-                                    noti_user: task.noti_user || '',
-                                    repeat_yn: 1,
-                                    unit_id: task.unit_id || SESSION.unit.unit_id,
-                                    user_id0: SESSION.user.user_id,
-                                    user_id2: SESSION.user.user_id,
-                                    datetime0: _nrStr,
-                                    datetime2: _nrStr
-                                };
-                                const tmpRepId = '_tmp_repeat_' + Date.now();
-                                ALL_TASKS.push({ ...repeatPayload, id: tmpRepId });
-                                syncTasksCache();
-                                if (currentMenuId === '10.01') refreshTable1001();
-                                fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: repeatPayload }) })
-                                    .then(r => r.json())
-                                    .then(res2 => {
-                                        if (res2.status === 'success' && res2.id) {
-                                            const ri = ALL_TASKS.findIndex(t => String(t.id) === tmpRepId);
-                                            if (ri > -1) { ALL_TASKS[ri].id = res2.id; syncTasksCache(); }
-                                        }
-                                    }).catch(console.error);
-                            }
+                            const tmpRepId = '_tmp_repeat_' + Date.now();
+                            ALL_TASKS.push({ ...repeatPayload, id: tmpRepId });
+                            syncTasksCache();
+                            if (currentMenuId === '10.01') refreshTable1001();
+                            fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'saveTask', data: repeatPayload }) })
+                                .then(r => r.json())
+                                .then(res2 => {
+                                    if (res2.status === 'success' && res2.id) {
+                                        const ri = ALL_TASKS.findIndex(t => String(t.id) === tmpRepId);
+                                        if (ri > -1) { ALL_TASKS[ri].id = res2.id; syncTasksCache(); }
+                                    }
+                                }).catch(console.error);
                         }
-                    })
-                    .catch(() => { TASKS_DIRTY = true; });
-            });
+                    }
+                })
+                .catch(() => { TASKS_DIRTY = true; });
         }
 
         function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
@@ -1544,6 +1610,17 @@
             const [hh, mm, ss] = parts[1].split(':').map(Number);
             if (!d || !m || !y) return null;
             return new Date(y, m - 1, d, hh || 0, mm || 0, ss || 0);
+        }
+
+        // Date -> giá trị cho input type="datetime-local" (YYYY-MM-DDTHH:MM)
+        function toDatetimeLocalValue(date) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+        // Date -> chuỗi định dạng datetime0 dùng trong app: DD/MM/YYYY HH:MM:SS
+        function toDatetime0Str(date) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${pad(date.getDate())}/${pad(date.getMonth()+1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
         }
 
         function parseLocalDate(str) {
@@ -3457,6 +3534,9 @@
         window.renderCalendar = renderCalendar;
         window.doQuickStart = doQuickStart;
         window.doQuickDone = doQuickDone;
+        window.openDoneTaskModal = openDoneTaskModal;
+        window.recalcDoneDuration = recalcDoneDuration;
+        window.saveDoneTask = saveDoneTask;
         window.doDeleteTask = doDeleteTask;
         window.closeModal = closeModal;
         window.handleLogin = handleLogin;
