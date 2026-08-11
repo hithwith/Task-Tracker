@@ -1390,8 +1390,8 @@
             const startDate = task.act_start_date ? parseDatetime0(task.act_start_date) : null;
             const nowDate = new Date();
 
-            const startVal = (startDate && !isNaN(startDate)) ? toDatetimeLocalValue(startDate) : toDatetimeLocalValue(nowDate);
-            const endVal = toDatetimeLocalValue(nowDate);
+            const startD = (startDate && !isNaN(startDate)) ? startDate : nowDate;
+            const endD = nowDate;
 
             const html = `
                 <div id="done-task-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-3">
@@ -1404,11 +1404,17 @@
                             <div class="text-sm font-black text-slate-700">${task.task_name || ''}</div>
                             <div>
                                 <label class="text-[10px] font-black uppercase text-slate-400">Ngày giờ bắt đầu</label>
-                                <input type="datetime-local" id="dt_act_start" value="${startVal}" class="w-full px-3 py-2 border-2 rounded-lg text-sm outline-none focus:border-blue-400" oninput="recalcDoneDuration()">
+                                <div class="flex gap-2">
+                                    <input type="text" id="dt_act_start_date" class="date-mask flex-1 px-3 py-2 border-2 rounded-lg text-sm outline-none focus:border-blue-400" placeholder="DD/MM/YYYY" maxlength="10" value="${dateToDMY(startD)}" oninput="recalcDoneDuration()">
+                                    <input type="text" id="dt_act_start_time" class="time-mask w-24 px-3 py-2 border-2 rounded-lg text-sm text-center outline-none focus:border-blue-400" placeholder="HH:MM" maxlength="5" value="${dateToHM(startD)}" oninput="recalcDoneDuration()">
+                                </div>
                             </div>
                             <div>
                                 <label class="text-[10px] font-black uppercase text-slate-400">Ngày giờ kết thúc</label>
-                                <input type="datetime-local" id="dt_act_end" value="${endVal}" class="w-full px-3 py-2 border-2 rounded-lg text-sm outline-none focus:border-blue-400" oninput="recalcDoneDuration()">
+                                <div class="flex gap-2">
+                                    <input type="text" id="dt_act_end_date" class="date-mask flex-1 px-3 py-2 border-2 rounded-lg text-sm outline-none focus:border-blue-400" placeholder="DD/MM/YYYY" maxlength="10" value="${dateToDMY(endD)}" oninput="recalcDoneDuration()">
+                                    <input type="text" id="dt_act_end_time" class="time-mask w-24 px-3 py-2 border-2 rounded-lg text-sm text-center outline-none focus:border-blue-400" placeholder="HH:MM" maxlength="5" value="${dateToHM(endD)}" oninput="recalcDoneDuration()">
+                                </div>
                             </div>
                             <div class="border-t pt-3">
                                 <label class="text-[10px] font-black uppercase text-slate-400">Số giờ / số phút đã làm việc (có thể điều chỉnh)</label>
@@ -1427,19 +1433,39 @@
                     </div>
                 </div>`;
             document.getElementById('modal-area').innerHTML = html;
+            initDateMasks();
+            initTimeMasks();
             recalcDoneDuration();
+        }
+
+        // Ghép ô ngày (DD/MM/YYYY) + ô giờ (HH:MM) thành đối tượng Date
+        function combineDMYAndHM(dateStr, timeStr) {
+            if (!dateStr) return null;
+            const dp = dateStr.trim().split('/');
+            if (dp.length !== 3) return null;
+            const [dd, mm, yyyy] = dp;
+            let hh = 0, mi = 0;
+            if (timeStr && timeStr.trim()) {
+                const tp = timeStr.trim().split(':');
+                hh = parseInt(tp[0], 10) || 0;
+                mi = parseInt(tp[1], 10) || 0;
+            }
+            const d = new Date(+yyyy, +mm - 1, +dd, hh, mi, 0);
+            return isNaN(d) ? null : d;
         }
 
         // Tự tính lại số giờ/số phút đã làm việc từ ngày giờ bắt đầu - kết thúc
         function recalcDoneDuration() {
-            const sEl = document.getElementById('dt_act_start');
-            const eEl = document.getElementById('dt_act_end');
+            const sdEl = document.getElementById('dt_act_start_date');
+            const stEl = document.getElementById('dt_act_start_time');
+            const edEl = document.getElementById('dt_act_end_date');
+            const etEl = document.getElementById('dt_act_end_time');
             const hEl = document.getElementById('dt_act_hours');
             const mEl = document.getElementById('dt_act_minutes');
-            if (!sEl || !eEl || !hEl || !mEl || !sEl.value || !eEl.value) return;
-            const start = new Date(sEl.value);
-            const end = new Date(eEl.value);
-            if (isNaN(start) || isNaN(end)) return;
+            if (!sdEl || !edEl || !hEl || !mEl) return;
+            const start = combineDMYAndHM(sdEl.value, stEl?.value);
+            const end = combineDMYAndHM(edEl.value, etEl?.value);
+            if (!start || !end) return;
             let diffSec = Math.round((end - start) / 1000);
             if (diffSec < 0) diffSec = 0;
             hEl.value = Math.floor(diffSec / 3600);
@@ -1449,16 +1475,18 @@
         // Lưu kết quả: ngày giờ bắt đầu -> act_start_date, ngày giờ kết thúc -> finish_date,
         // số giờ/phút đã làm việc (có thể đã điều chỉnh) -> act_time (giây), status = 5 (Hoàn thành)
         function saveDoneTask(id) {
-            const startVal = document.getElementById('dt_act_start').value;
-            const endVal = document.getElementById('dt_act_end').value;
+            const startDate = combineDMYAndHM(
+                document.getElementById('dt_act_start_date').value,
+                document.getElementById('dt_act_start_time').value
+            );
+            const endDate = combineDMYAndHM(
+                document.getElementById('dt_act_end_date').value,
+                document.getElementById('dt_act_end_time').value
+            );
             const hoursVal = parseInt(document.getElementById('dt_act_hours').value) || 0;
             const minutesVal = parseInt(document.getElementById('dt_act_minutes').value) || 0;
 
-            if (!startVal || !endVal) { alert('Vui lòng nhập đầy đủ ngày giờ bắt đầu và kết thúc.'); return; }
-
-            const startDate = new Date(startVal);
-            const endDate = new Date(endVal);
-            if (isNaN(startDate) || isNaN(endDate)) { alert('Ngày giờ không hợp lệ.'); return; }
+            if (!startDate || !endDate) { alert('Vui lòng nhập đầy đủ ngày giờ bắt đầu và kết thúc (định dạng DD/MM/YYYY, HH:MM).'); return; }
 
             const act_time = hoursVal * 3600 + minutesVal * 60;
             const actStartIso = toDatetime0Str(startDate);
@@ -1623,6 +1651,17 @@
             return `${pad(date.getDate())}/${pad(date.getMonth()+1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
         }
 
+        // Date -> chuỗi DD/MM/YYYY (hiển thị cố định, không phụ thuộc locale trình duyệt)
+        function dateToDMY(date) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${pad(date.getDate())}/${pad(date.getMonth()+1)}/${date.getFullYear()}`;
+        }
+        // Date -> chuỗi HH:MM 24h (hiển thị cố định, không phụ thuộc locale trình duyệt)
+        function dateToHM(date) {
+            const pad = n => String(n).padStart(2, '0');
+            return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        }
+
         function parseLocalDate(str) {
             if (!str) return null;
             // Dạng DD/MM/YYYY (từ input người dùng nhập)
@@ -1780,6 +1819,38 @@
             document.querySelectorAll('.date-mask').forEach(input => {
                 applyDateMask(input);
                 initDatePicker(input);
+            });
+        }
+
+        // =============================================
+        // TIME MASK - ô nhập giờ dạng HH:MM (24h), cố định định dạng
+        // =============================================
+        function applyTimeMask(input) {
+            input.addEventListener('input', () => {
+                let digits = input.value.replace(/\D/g, '').slice(0, 4);
+                if (digits.length >= 3) {
+                    input.value = digits.slice(0, 2) + ':' + digits.slice(2);
+                } else {
+                    input.value = digits;
+                }
+            });
+            input.addEventListener('blur', () => {
+                const v = input.value.trim();
+                const m = v.match(/^(\d{1,2}):?(\d{0,2})$/);
+                if (m) {
+                    const hh = Math.min(23, parseInt(m[1] || '0', 10));
+                    const mi = Math.min(59, parseInt(m[2] || '0', 10));
+                    input.value = String(hh).padStart(2, '0') + ':' + String(mi).padStart(2, '0');
+                } else if (!v) {
+                    input.value = '00:00';
+                }
+            });
+        }
+        function initTimeMasks() {
+            document.querySelectorAll('.time-mask').forEach(input => {
+                if (input._tmInit) return;
+                input._tmInit = true;
+                applyTimeMask(input);
             });
         }
 
