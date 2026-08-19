@@ -312,7 +312,7 @@
             sidebarEl.innerHTML = '';
 
             // 1. Menu từ API (lọc bỏ các menu cố định)
-            const excludedIds = ['10.05', '10.05.01', '10.05.02', '10.06'];
+            const excludedIds = ['10.05', '10.05.01', '10.05.02', '10.05.03', '10.06'];
             (SESSION.menus || [])
                 .filter(m => !excludedIds.includes(m.menu_id))
                 .filter(m => m.menu_id !== '10.04' || isAdmin)
@@ -355,6 +355,14 @@
             a2.textContent = '📈 Thống kê thời gian làm việc phòng';
             a2.onclick = () => switchMenu('10.05.02', 'Báo cáo tổng tình hình làm việc phòng');
             reportGroup.appendChild(a2);
+
+            const a3 = document.createElement('a');
+            a3.href = 'javascript:void(0)';
+            a3.id = 'menu-10.05.03';
+            a3.className = 'sidebar-item flex items-center pl-6 pr-4 py-3 rounded-xl text-xs font-bold transition';
+            a3.textContent = '⏱️ Thống kê tăng ca';
+            a3.onclick = () => switchMenu('10.05.03', 'Thống kê tăng ca');
+            reportGroup.appendChild(a3);
             sidebarEl.appendChild(reportGroup);
             console.log('sidebar HTML sau khi build:', sidebarEl.innerHTML.substring(0, 800));
             document.getElementById('page-title').innerText = 'Tổng hợp công việc';
@@ -448,6 +456,7 @@
             else if (menuId === '10.04') renderProjectList();
             else if (menuId === '10.05.01') renderReport100501();
             else if (menuId === '10.05.02') renderReport100502();
+            else if (menuId === '10.05.03') renderReport100503();
             else if (menuId === '10.06') await renderOutoffice();
         }
 
@@ -2657,6 +2666,160 @@
 
         window.setReport100502Group = setReport100502Group;
         window.exportReport100502Excel = exportReport100502Excel;
+        // =============================================
+        // 10.05.03 - THỐNG KÊ TĂNG CA
+        // =============================================
+        // Lấy danh sách task tăng ca (over_time = 1) có finish_date trong khoảng ngày lọc
+        function getReport100503Tasks(fromStr, toStr) {
+            const fromDate = parseLocalDate(fromStr);
+            const toDate   = parseLocalDate(toStr);
+            return ALL_TASKS.filter(t => {
+                if (t.over_time != 1) return false;
+                if (!t.finish_date) return false;
+                const fd = parseDatetime0(t.finish_date);
+                if (!fd) return false;
+                const fdDay = new Date(fd.getFullYear(), fd.getMonth(), fd.getDate());
+                if (fromDate && fdDay < fromDate) return false;
+                if (toDate && fdDay > toDate) return false;
+                return true;
+            }).sort((a, b) => {
+                const da = parseDatetime0(a.finish_date);
+                const db = parseDatetime0(b.finish_date);
+                return (da && db) ? da - db : 0;
+            });
+        }
+
+        function renderReport100503() {
+            const container = document.getElementById('main-content');
+            const today = new Date();
+            const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const defaultFrom = firstOfMonth.getDate().toString().padStart(2,'0') + '/' + (firstOfMonth.getMonth()+1).toString().padStart(2,'0') + '/' + firstOfMonth.getFullYear();
+            const defaultTo   = today.getDate().toString().padStart(2,'0') + '/' + (today.getMonth()+1).toString().padStart(2,'0') + '/' + today.getFullYear();
+
+            container.innerHTML = `
+                <div class="bg-white p-6 rounded-2xl shadow-sm border mb-6">
+                    <div class="flex flex-wrap gap-4 items-end mb-4">
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black uppercase text-slate-400">Từ ngày</label>
+                            <input type="text" id="rpt0503_from" class="date-mask p-2.5 border-2 rounded-xl text-sm w-36 outline-none focus:border-blue-400" placeholder="DD/MM/YYYY" maxlength="10" value="${defaultFrom}">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] font-black uppercase text-slate-400">Đến ngày</label>
+                            <input type="text" id="rpt0503_to" class="date-mask p-2.5 border-2 rounded-xl text-sm w-36 outline-none focus:border-blue-400" placeholder="DD/MM/YYYY" maxlength="10" value="${defaultTo}">
+                        </div>
+                        <div class="flex gap-2 items-end">
+                            <button onclick="applyReport100503()" class="px-6 py-2.5 bg-slate-800 text-white rounded-xl font-bold text-sm">XEM BÁO CÁO</button>
+                            <button onclick="exportReport100503Excel()" class="px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm">📥 Xuất Excel</button>
+                        </div>
+                    </div>
+                    <div id="rpt0503_table_area">${buildReport100503Table(defaultFrom, defaultTo)}</div>
+                </div>`;
+            initDateMasks();
+        }
+
+        function buildReport100503Table(fromStr, toStr) {
+            const tasks = getReport100503Tasks(fromStr, toStr);
+            if (!tasks.length) {
+                return '<div class="text-center py-12 text-slate-400 text-sm">Không có dữ liệu tăng ca trong khoảng thời gian này.</div>';
+            }
+
+            const theadHtml = '<thead class="bg-slate-800 text-white">'
+                + '<tr class="text-[10px] font-black uppercase tracking-widest">'
+                + '<th class="p-3 text-left" style="min-width:110px">Ngày hoàn thành</th>'
+                + '<th class="p-3 text-left" style="min-width:160px">Người thực hiện</th>'
+                + '<th class="p-3 text-left" style="min-width:260px">Chi tiết công việc</th>'
+                + '<th class="p-3 text-center" style="min-width:100px">Số phút</th>'
+                + '<th class="p-3 text-center" style="min-width:120px">Quy đổi số giờ</th>'
+                + '</tr></thead>';
+
+            // Nhóm theo Người thực hiện
+            const byUser = {};
+            tasks.forEach(t => {
+                const uid = t.user_id;
+                if (!byUser[uid]) byUser[uid] = [];
+                byUser[uid].push(t);
+            });
+
+            let tbody = '';
+            let totalMinutes = 0;
+            Object.keys(byUser).sort((a, b) => getUserName(a).localeCompare(getUserName(b))).forEach(uid => {
+                const uTasks = byUser[uid];
+                const uSeconds = uTasks.reduce((s, t) => s + (parseFloat(t.act_time) || 0), 0);
+                const uMinutes = uSeconds / 60;
+                // Dòng nhóm theo Người thực hiện
+                tbody += '<tr class="bg-emerald-50 border-b-2 border-emerald-200 font-black">'
+                    + '<td class="p-3 text-sm text-emerald-800" colspan="3">👤 ' + getUserName(uid) + ' <span class="font-bold opacity-60">(' + uTasks.length + ' công việc)</span></td>'
+                    + '<td class="p-3 text-center text-sm text-blue-700">' + uMinutes.toLocaleString('vi-VN', {maximumFractionDigits: 2}) + '</td>'
+                    + '<td class="p-3 text-center text-sm text-emerald-700">' + (uSeconds/3600).toFixed(2) + '</td>'
+                    + '</tr>';
+                // Chi tiết công việc
+                uTasks.forEach(t => {
+                    const seconds = parseFloat(t.act_time) || 0;
+                    const minutes = seconds / 60;
+                    const hours = seconds / 3600;
+                    totalMinutes += minutes;
+                    tbody += '<tr class="border-b hover:bg-slate-50">'
+                        + '<td class="p-3 text-xs text-slate-700 font-bold">' + formatFinishDate(t.finish_date) + '</td>'
+                        + '<td class="p-3 text-xs text-slate-400 pl-6">↳</td>'
+                        + '<td class="p-3 text-xs text-slate-700">' + (t.task_name || '') + '</td>'
+                        + '<td class="p-3 text-center text-xs text-blue-600">' + minutes.toLocaleString('vi-VN', {maximumFractionDigits: 2}) + '</td>'
+                        + '<td class="p-3 text-center text-xs text-emerald-600">' + hours.toFixed(2) + '</td>'
+                        + '</tr>';
+                });
+            });
+
+            const totalRow = '<tr class="bg-slate-800 text-white font-black border-t-2">'
+                + '<td class="p-3 text-sm uppercase tracking-wider" colspan="3">TỔNG CỘNG (' + tasks.length + ' công việc)</td>'
+                + '<td class="p-3 text-center text-sm">' + totalMinutes.toLocaleString('vi-VN', {maximumFractionDigits: 2}) + '</td>'
+                + '<td class="p-3 text-center text-sm">' + (totalMinutes/60).toFixed(2) + '</td>'
+                + '</tr>';
+
+            return '<div class="rounded-xl border overflow-hidden overflow-x-auto">'
+                + '<table class="w-full text-sm">' + theadHtml + '<tbody>' + tbody + totalRow + '</tbody></table>'
+                + '</div>';
+        }
+
+        function applyReport100503() {
+            const from = document.getElementById('rpt0503_from').value;
+            const to   = document.getElementById('rpt0503_to').value;
+            document.getElementById('rpt0503_table_area').innerHTML = buildReport100503Table(from, to);
+        }
+
+        function exportReport100503Excel() {
+            const from = document.getElementById('rpt0503_from')?.value || '';
+            const to   = document.getElementById('rpt0503_to')?.value || '';
+            const tasks = getReport100503Tasks(from, to);
+            if (!tasks.length) { alert('Không có dữ liệu để xuất!'); return; }
+
+            const sheetData = [['Ngày hoàn thành', 'Người thực hiện', 'Chi tiết công việc', 'Số phút', 'Quy đổi số giờ']];
+
+            // Nhóm theo Người thực hiện
+            const byUser = {};
+            tasks.forEach(t => { if (!byUser[t.user_id]) byUser[t.user_id] = []; byUser[t.user_id].push(t); });
+
+            let totalMinutes = 0;
+            Object.keys(byUser).sort((a, b) => getUserName(a).localeCompare(getUserName(b))).forEach(uid => {
+                const uTasks = byUser[uid];
+                const uSeconds = uTasks.reduce((s, t) => s + (parseFloat(t.act_time) || 0), 0);
+                sheetData.push([getUserName(uid) + ' (' + uTasks.length + ' công việc)', '', '', parseFloat((uSeconds/60).toFixed(2)), parseFloat((uSeconds/3600).toFixed(2))]);
+                uTasks.forEach(t => {
+                    const seconds = parseFloat(t.act_time) || 0;
+                    const minutes = seconds / 60;
+                    totalMinutes += minutes;
+                    sheetData.push([formatFinishDate(t.finish_date), getUserName(t.user_id), t.task_name || '', parseFloat(minutes.toFixed(2)), parseFloat((seconds/3600).toFixed(2))]);
+                });
+            });
+            sheetData.push(['TỔNG CỘNG', '', '', parseFloat(totalMinutes.toFixed(2)), parseFloat((totalMinutes/60).toFixed(2))]);
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(sheetData);
+            ws['!cols'] = [{ wch: 14 }, { wch: 22 }, { wch: 40 }, { wch: 12 }, { wch: 14 }];
+            XLSX.utils.book_append_sheet(wb, ws, 'Thống kê tăng ca');
+            XLSX.writeFile(wb, 'ThongKe_TangCa_' + from.replace(/\//g,'-') + '_den_' + to.replace(/\//g,'-') + '.xlsx');
+        }
+
+        window.applyReport100503 = applyReport100503;
+        window.exportReport100503Excel = exportReport100503Excel;
         // =============================================
         // 10.06 - VẮNG MẶT / RA NGOÀI
         // =============================================
