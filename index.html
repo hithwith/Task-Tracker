@@ -1404,8 +1404,8 @@
 
             const html = `
                 <div id="done-task-modal" class="modal-bg fixed inset-0 flex items-center justify-center p-3">
-                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-                        <div class="px-5 py-3 bg-emerald-600 text-white font-black flex justify-between uppercase tracking-widest flex-shrink-0">
+                    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl">
+                        <div class="px-5 py-3 bg-emerald-600 text-white font-black flex justify-between uppercase tracking-widest flex-shrink-0 rounded-t-2xl">
                             <span>Hoàn thành công việc</span>
                             <button onclick="closeModal('done-task-modal')" class="text-xl leading-none">&times;</button>
                         </div>
@@ -1435,7 +1435,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="p-4 bg-slate-50 border-t flex justify-end gap-3">
+                        <div class="p-4 bg-slate-50 border-t flex justify-end gap-3 rounded-b-2xl">
                             <button type="button" onclick="closeModal('done-task-modal')" class="px-6 py-2 bg-gray-100 rounded-xl font-bold text-sm">HỦY</button>
                             <button type="button" onclick="saveDoneTask('${id}')" class="px-8 py-2 bg-emerald-600 text-white rounded-xl font-black shadow-lg shadow-emerald-100 text-sm">XÁC NHẬN XONG</button>
                         </div>
